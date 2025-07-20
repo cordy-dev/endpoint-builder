@@ -4,44 +4,44 @@
 name: Publish
 
 on:
-  release:
-    types: [created]
+    release:
+        types: [created]
 
 jobs:
-  test-and-npm-publish:
-    name: Build, Test & Publish
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write # to enable use of OIDC for npm provenance
+    test-and-npm-publish:
+        name: Build, Test & Publish
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write # to enable use of OIDC for npm provenance
 
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: "npm"
-          registry-url: "https://registry.npmjs.org"
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: "npm"
+                  registry-url: "https://registry.npmjs.org"
 
-      - name: Install dependencies
-        run: npm ci
-      - name: Update npm
-        run: npm install -g npm@latest # Ensure npm is up-to-date. Provenance requires v9.6.0 or higher.
-      - name: Build
-        run: npm run build
-      - name: Test
-        run: npm run test
+            - name: Install dependencies
+              run: npm ci
+            - name: Update npm
+              run: npm install -g npm@latest # Ensure npm is up-to-date. Provenance requires v9.6.0 or higher.
+            - name: Build
+              run: npm run build
+            - name: Test
+              run: npm run test
 
-      # if the release is not a pre-release, publish to npm as latest
-      - name: Publish
-        if: github.event.release.prerelease == false
-        run: npm publish --provenance # remove the --provenance flag if you don't want to use npm provenance, or having issues with it
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+            # if the release is not a pre-release, publish to npm as latest
+            - name: Publish
+              if: github.event.release.prerelease == false
+              run: npm publish --provenance # remove the --provenance flag if you don't want to use npm provenance, or having issues with it
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # if the release is a pre-release, publish to npm using the beta tag
-      - name: Publish [beta]
-        if: github.event.release.prerelease == true
-        run: npm publish --tag beta --provenance # remove the --provenance flag if you don't want to use npm provenance, or having issues with it
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+            # if the release is a pre-release, publish to npm using the beta tag
+            - name: Publish [beta]
+              if: github.event.release.prerelease == true
+              run: npm publish --tag beta --provenance # remove the --provenance flag if you don't want to use npm provenance, or having issues with it
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
