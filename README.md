@@ -4,12 +4,12 @@ Modern, type-safe HTTP client for TypeScript applications with zero dependencies
 
 ## Why Choose This Library?
 
-🎯 **Zero Dependencies** - No bloated node_modules, just native fetch
-⚡ **Type Safety** - Full TypeScript support with autocompletion
-🔄 **Smart Retry Logic** - Built-in exponential backoff and custom strategies
-🔐 **Advanced Auth** - Bearer, API Key, Basic, and custom authentication
-🎭 **Mock Support** - Perfect for development and testing
-💾 **Request Caching** - Automatic deduplication of parallel requests
+- 🎯 **Zero Dependencies** – No bloated `node_modules`, just native fetch
+- ⚡ **Type Safety** – Full TypeScript support with autocompletion
+- 🔄 **Smart Retry Logic** – Built-in exponential backoff and custom strategies
+- 🔐 **Advanced Auth** – Bearer, API Key, Basic, and custom authentication
+- 🎭 **Mock Support** – Perfect for development and testing
+- 💾 **Request Caching** – Automatic deduplication of parallel requests
 
 ## Quick Start
 
