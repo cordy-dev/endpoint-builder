@@ -1,30 +1,6 @@
 # HTTP Endpoint Builder
 
-Modern, type-safe HTTP client for TypeScript applications with zero dependencies. Built on native fetch with advanced features for real-wor#### Request Caching
-Automatic deduplication of identical parallel requests:
-
-````typescript
-// These requests will be deduplicated - only ONE HTTP request is made!
-const [user1, user2, user3] = await Promise.all([
-  client.get('/user/123').cache(true).data(),
-  client.get('/user/123').cache(true).data(), // Same request, uses cached Promise
-  client.get('/user/123').cache(true).data()  // Same request, uses cached Promise
-]);
-
-console.log(user1 === user2 === user3); // true - same object reference!
-
-// Cache works for identical requests (same URL, headers, body)
-const [posts1, posts2] = await Promise.all([
-  client.get('/posts').params({ page: 1 }).cache(true).data(),
-  client.get('/posts').params({ page: 1 }).cache(true).data() // Deduplicated!
-]);
-
-// Different parameters = different cache keys = separate requests
-const [page1, page2] = await Promise.all([
-  client.get('/posts').params({ page: 1 }).cache(true).data(), // Request 1
-  client.get('/posts').params({ page: 2 }).cache(true).data()  // Request 2
-]);
-```plications.
+Modern, type-safe HTTP client for TypeScript applications with zero dependencies. Built on native fetch with advanced features for real-world applications.
 
 ## Why Choose This Library?
 
@@ -39,7 +15,7 @@ const [page1, page2] = await Promise.all([
 
 ```bash
 npm install @cordy/endpoint-builder
-````
+```
 
 ```typescript
 import { HttpClient, BearerAuthStrategy } from "@cordy/endpoint-builder";
@@ -191,6 +167,33 @@ Automatic deduplication of identical parallel requests:
 const [user1, user2] = await Promise.all([
 	client.get("/user/123").cache(true).data(),
 	client.get("/user/123").cache(true).data(), // Same request, cached
+]);
+```
+
+#### Request Caching
+
+Automatic deduplication of identical parallel requests:
+
+```typescript
+// These requests will be deduplicated - only ONE HTTP request is made!
+const [user1, user2, user3] = await Promise.all([
+  client.get('/user/123').cache(true).data(),
+  client.get('/user/123').cache(true).data(), // Same request, uses cached Promise
+  client.get('/user/123').cache(true).data()  // Same request, uses cached Promise
+]);
+
+console.log(user1 === user2 === user3); // true - same object reference!
+
+// Cache works for identical requests (same URL, headers, body)
+const [posts1, posts2] = await Promise.all([
+  client.get('/posts').params({ page: 1 }).cache(true).data(),
+  client.get('/posts').params({ page: 1 }).cache(true).data() // Deduplicated!
+]);
+
+// Different parameters = different cache keys = separate requests
+const [page1, page2] = await Promise.all([
+  client.get('/posts').params({ page: 1 }).cache(true).data(), // Request 1
+  client.get('/posts').params({ page: 2 }).cache(true).data()  // Request 2
 ]);
 ```
 
