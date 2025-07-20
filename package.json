@@ -28,8 +28,6 @@
 	},
 	"scripts": {
 		"lint:check": "npm run lint",
-		"format": "prettier --cache --write .",
-		"format:check": "prettier --cache --check .",
 		"build": "tsdown",
 		"dev": "tsdown --watch",
 		"test": "vitest run --reporter=verbose",
