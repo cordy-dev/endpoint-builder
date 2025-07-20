@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check: # this job does all tests so it can fail fast and cancel other jobs
+    name: Fail Fast - Check Code Style, Lint, Build & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+      - name: Check linting
+        run: npm run lint:check
+      - name: Check code style
+        run: npm run format:check
+      - name: Check build
+        run: npm run build
+      - name: Check testes
+        run: npm run test
+      # Uncomment the following line to check test coverage
+      # - name: Check testes & coverage
+      #   run: npm run test:coverage
+
+  node-tests:
+    name: Node.js - Build & Test
+    runs-on: ubuntu-latest
+    needs: check
+    if: success()
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        node-version: [22.x, 24.x]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Unit test
+        run: npm test

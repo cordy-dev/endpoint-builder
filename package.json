@@ -1,0 +1,79 @@
+{
+	"name": "@cordy/endpoint-builder",
+	"version": "1.0.0",
+	"description": "A flexible TypeScript library for building REST API endpoints with full type safety",
+	"type": "module",
+	"license": "MIT",
+	"homepage": "https://github.com/cordy-dev/endpoint-builder#readme",
+	"bugs": {
+		"url": "https://github.com/cordy-dev/endpoint-builder/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/cordy-dev/endpoint-builder.git"
+	},
+	"author": "Anton Ryuben <developer@myraxbyte.dev>",
+	"files": [
+		"dist"
+	],
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": "./dist/index.js",
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"lint:check": "npm run lint",
+		"format": "prettier --cache --write .",
+		"format:check": "prettier --cache --check .",
+		"build": "tsdown",
+		"dev": "tsdown --watch",
+		"test": "vitest run --reporter=verbose",
+		"typecheck": "tsc --noEmit",
+		"release": "bumpp && npm publish",
+		"prepublishOnly": "npm run build",
+		"lint": "eslint",
+		"lint:fix": "eslint --fix"
+	},
+	"devDependencies": {
+		"@eslint/css": "^0.10.0",
+		"@eslint/eslintrc": "^3.3.1",
+		"@eslint/js": "^9.31.0",
+		"@eslint/json": "^0.13.0",
+		"@types/node": "^24.0.15",
+		"@vitest/coverage-v8": "^3.2.4",
+		"bumpp": "^10.2.0",
+		"eslint": "^9.31.0",
+		"eslint-config-prettier": "^10.1.8",
+		"eslint-plugin-prettier": "^5.5.3",
+		"eslint-plugin-simple-import-sort": "^12.1.1",
+		"eslint-plugin-unused-imports": "^4.1.4",
+		"globals": "^16.3.0",
+		"lint-staged": "^16.1.2",
+		"prettier": "^3.6.2",
+		"simple-git-hooks": "^2.13.0",
+		"tsdown": "^0.12.9",
+		"tsx": "^4.20.3",
+		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.37.0",
+		"vitest": "^3.2.4"
+	},
+	"simple-git-hooks": {
+		"pre-commit": "npm run lint-staged"
+	},
+	"lint-staged": {
+		"*": "npm run lint:fix"
+	},
+	"keywords": [
+		"typescript",
+		"api",
+		"endpoint",
+		"builder",
+		"rest",
+		"http"
+	]
+}
