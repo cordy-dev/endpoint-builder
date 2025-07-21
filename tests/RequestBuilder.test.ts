@@ -5,24 +5,24 @@ import { RequestBuilder } from "../src/core/RequestBuilder";
 import { mockFetch } from "./utils/test-helpers";
 
 describe("RequestBuilder", () => {
-	// Сохраняем оригинальный fetch
+	// Save the original fetch
 	const originalFetch = global.fetch;
 	let client: HttpClient;
 
 	beforeEach(() => {
-		// Создаем новый клиент для каждого теста
+		// Create a new client for each test
 		client = new HttpClient({ baseUrl: "https://api.example.com" });
-		// Очищаем моки перед каждым тестом
+		// Clear mocks before each test
 		vi.resetAllMocks();
 	});
 
 	afterEach(() => {
-		// Восстанавливаем оригинальный fetch после каждого теста
+		// Restore the original fetch after each test
 		global.fetch = originalFetch;
 	});
 
-	describe("метод метод", () => {
-		it("должен устанавливать HTTP метод", () => {
+	describe("method method", () => {
+		it("should set the HTTP method", () => {
 			const builder = new RequestBuilder(client, "/users");
 
 			builder.method("POST");
@@ -31,8 +31,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод query", () => {
-		it("должен устанавливать query параметры", () => {
+	describe("query method", () => {
+		it("should set query parameters", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const query = { page: 1, limit: 10, filter: "active" };
 
@@ -42,8 +42,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("методы headers и header", () => {
-		it("должен устанавливать несколько заголовков через объект", () => {
+	describe("headers and header methods", () => {
+		it("should set multiple headers via object", () => {
 			const builder = new RequestBuilder(client, "/users");
 
 			builder.headers({
@@ -55,7 +55,7 @@ describe("RequestBuilder", () => {
 			expect(builder._headers["X-API-Key"]).toBe("test-api-key");
 		});
 
-		it("должен устанавливать отдельный заголовок", () => {
+		it("should set a single header", () => {
 			const builder = new RequestBuilder(client, "/users");
 
 			builder.header("Authorization", "Bearer token123");
@@ -63,7 +63,7 @@ describe("RequestBuilder", () => {
 			expect(builder._headers["Authorization"]).toBe("Bearer token123");
 		});
 
-		it("должен объединять заголовки при нескольких вызовах", () => {
+		it("should merge headers with multiple calls", () => {
 			const builder = new RequestBuilder(client, "/users");
 
 			builder.headers({ "Content-Type": "application/json" });
@@ -74,8 +74,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод responseType", () => {
-		it("должен устанавливать тип ответа", () => {
+	describe("responseType method", () => {
+		it("should set the response type", () => {
 			const builder = new RequestBuilder(client, "/images/1");
 
 			builder.responseType("blob");
@@ -84,8 +84,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод body", () => {
-		it("должен устанавливать тело запроса", () => {
+	describe("body method", () => {
+		it("should set the request body", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const body = { name: "John", email: "john@example.com" };
 
@@ -95,8 +95,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод json", () => {
-		it("должен устанавливать тело запроса и заголовок Content-Type: application/json", () => {
+	describe("json method", () => {
+		it("should set request body and Content-Type: application/json header", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const body = { name: "John", email: "john@example.com" };
 
@@ -107,8 +107,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод form", () => {
-		it("должен устанавливать FormData как тело запроса", () => {
+	describe("form method", () => {
+		it("should set FormData as request body", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const formData = new FormData();
 			formData.append("name", "John");
@@ -120,7 +120,7 @@ describe("RequestBuilder", () => {
 			expect(builder._headers["Content-Type"]).toBe("multipart/form-data");
 		});
 
-		it("должен преобразовывать объект в FormData", () => {
+		it("should convert object to FormData", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const data = { name: "John", email: "john@example.com" };
 
@@ -130,7 +130,7 @@ describe("RequestBuilder", () => {
 			expect(builder._headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
 		});
 
-		it("должен игнорировать null и undefined значения при создании FormData", () => {
+		it("should ignore null and undefined values when creating FormData", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const data = { name: "John", email: null, age: undefined, active: false };
 
@@ -144,8 +144,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод auth", () => {
-		it("должен устанавливать стратегию аутентификации", () => {
+	describe("auth method", () => {
+		it("should set authentication strategy", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const authStrategy = {
 				enrich: vi.fn().mockResolvedValue({ Authorization: "Bearer token123" })
@@ -156,7 +156,7 @@ describe("RequestBuilder", () => {
 			expect(builder._auth).toBe(authStrategy);
 		});
 
-		it("должен позволять отключать аутентификацию для запроса", () => {
+		it("should allow disabling authentication for a request", () => {
 			const builder = new RequestBuilder(client, "/public/data");
 
 			builder.auth(null);
@@ -165,11 +165,11 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод dedupe", () => {
-		it("должен включать или выключать дедупликацию запросов", () => {
+	describe("dedupe method", () => {
+		it("should enable or disable request deduplication", () => {
 			const builder = new RequestBuilder(client, "/users");
 
-			// По умолчанию должен быть равен значению из HttpClient
+			// By default should be equal to the value from HttpClient
 			expect(builder._dedupe).toBe(false);
 
 			builder.dedupe(true);
@@ -180,20 +180,9 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод mock", () => {
-		it("должен создавать новый HttpClient с включенным режимом mock", () => {
-			const builder = new RequestBuilder(client, "/users");
-			const mockedBuilder = builder.mock();
-
-			// Проверяем, что у нового билдера другой клиент с включенным mock
-			expect(mockedBuilder).not.toBe(builder);
-			expect((mockedBuilder as any).client.defaults.mock).toBe(true);
-		});
-	});
-
-	describe("метод data", () => {
-		it("должен выполнять запрос и возвращать только данные", async () => {
-			// Мокаем fetch
+	describe("data method", () => {
+		it("should execute the request and return only the data", async () => {
+			// Mock fetch
 			const mockResponseData = { id: 1, name: "Test User" };
 			global.fetch = mockFetch(mockResponseData);
 
@@ -205,9 +194,9 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод send", () => {
-		it("должен выполнять запрос и возвращать полный ответ", async () => {
-			// Мокаем fetch
+	describe("send method", () => {
+		it("should execute the request and return the full response", async () => {
+			// Mock fetch
 			const mockResponseData = { id: 1, name: "Test User" };
 			global.fetch = mockFetch(mockResponseData, 200, { "Content-Type": "application/json" });
 
@@ -221,8 +210,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод timeout", () => {
-		it("должен устанавливать таймаут для запроса", () => {
+	describe("timeout method", () => {
+		it("should set the request timeout", () => {
 			const builder = new RequestBuilder(client, "/users");
 
 			builder.timeout(5000);
@@ -231,8 +220,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод signal", () => {
-		it("должен устанавливать AbortSignal для запроса", () => {
+	describe("signal method", () => {
+		it("should set AbortSignal for the request", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const controller = new AbortController();
 
@@ -242,8 +231,8 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("метод retry", () => {
-		it("должен устанавливать стратегию повторных попыток", () => {
+	describe("retry method", () => {
+		it("should set the retry strategy", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const retryStrategy = {
 				shouldRetry: vi.fn().mockReturnValue(true),
@@ -255,7 +244,7 @@ describe("RequestBuilder", () => {
 			expect(builder._retry).toBe(retryStrategy);
 		});
 
-		it("должен позволять отключать повторные попытки", () => {
+		it("should allow disabling retries", () => {
 			const builder = new RequestBuilder(client, "/users");
 
 			builder.retry(null);
@@ -264,9 +253,9 @@ describe("RequestBuilder", () => {
 		});
 	});
 
-	describe("цепочка вызовов", () => {
-		it("должен поддерживать цепочку вызовов методов", async () => {
-			// Мокаем fetch
+	describe("method chaining", () => {
+		it("should support method call chaining", async () => {
+			// Mock fetch
 			global.fetch = mockFetch({ success: true });
 
 			const result = await client

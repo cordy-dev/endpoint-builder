@@ -5,7 +5,7 @@ import type { RetryContext } from "../src/retry/RetryStrategy";
 
 describe("JitteredExponentialBackoffRetryStrategy", () => {
 	describe("shouldRetry", () => {
-		it("должен возвращать true для сетевых ошибок (отсутствие response)", () => {
+		it("should return true for network errors (missing response)", () => {
 			const strategy = new JitteredExponentialBackoffRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
@@ -13,7 +13,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			};
 
 			expect(strategy.shouldRetry(ctx)).toBe(true);
-		});		it("должен возвращать true для 5xx ошибок", () => {
+		});		it("should return true for 5xx errors", () => {
 			const strategy = new JitteredExponentialBackoffRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
@@ -24,7 +24,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			expect(strategy.shouldRetry(ctx)).toBe(true);
 		});
 
-		it("должен возвращать true для 429 (слишком много запросов)", () => {
+		it("should return true for 429 (too many requests)", () => {
 			const strategy = new JitteredExponentialBackoffRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
@@ -33,7 +33,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			};
 
 			expect(strategy.shouldRetry(ctx)).toBe(true);
-		});		it("должен возвращать false для успешных ответов", () => {
+		});		it("should return false for successful responses", () => {
 			const strategy = new JitteredExponentialBackoffRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
@@ -44,7 +44,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			expect(strategy.shouldRetry(ctx)).toBe(false);
 		});
 
-		it("должен возвращать false для 4xx ошибок (кроме 429)", () => {
+		it("should return false for 4xx errors (except 429)", () => {
 			const strategy = new JitteredExponentialBackoffRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
@@ -55,7 +55,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			expect(strategy.shouldRetry(ctx)).toBe(false);
 		});
 
-		it("должен возвращать false, если достигнуто максимальное количество попыток", () => {
+		it("should return false if maximum number of attempts is reached", () => {
 			const strategy = new JitteredExponentialBackoffRetryStrategy(3);
 			const ctx: RetryContext = {
 				attempt: 3,
@@ -69,7 +69,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 
 	describe("nextDelay", () => {
 		beforeEach(() => {
-			// Мокаем Math.random для предсказуемых результатов
+			// Mock Math.random for predictable results
 			vi.spyOn(Math, "random").mockReturnValue(0.5);
 		});
 
@@ -77,7 +77,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			vi.restoreAllMocks();
 		});
 
-		it("должен возвращать правильную задержку для первой попытки", () => {
+		it("should return the correct delay for the first attempt", () => {
 			const strategy = new JitteredExponentialBackoffRetryStrategy(3, 300);
 			const ctx: RetryContext = {
 				attempt: 1,
@@ -90,7 +90,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			expect(strategy.nextDelay(ctx)).toBe(225);
 		});
 
-		it("должен возвращать экспоненциально увеличивающуюся задержку", () => {
+		it("should return exponentially increasing delay", () => {
 			const strategy = new JitteredExponentialBackoffRetryStrategy(3, 300);
 			const ctx1: RetryContext = {
 				attempt: 1,
@@ -105,13 +105,13 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 				config: { url: "test", method: "GET" as const }
 			};
 
-			// Первая попытка: base = 300, jittered = 225
+			// First attempt: base = 300, jittered = 225
 			const delay1 = strategy.nextDelay(ctx1);
 
-			// Вторая попытка: 300 * 2^1 = 600, jittered = 450
+			// Second attempt: 300 * 2^1 = 600, jittered = 450
 			const delay2 = strategy.nextDelay(ctx2);
 
-			// Третья попытка: 300 * 2^2 = 1200, jittered = 900
+			// Third attempt: 300 * 2^2 = 1200, jittered = 900
 			const delay3 = strategy.nextDelay(ctx3);
 
 			expect(delay1).toBe(225);
@@ -121,11 +121,11 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			expect(delay3).toBeGreaterThan(delay2);
 		});
 
-		it("должен ограничивать максимальную задержку", () => {
+		it("should limit the maximum delay", () => {
 			const maxDelay = 1000;
 			const strategy = new JitteredExponentialBackoffRetryStrategy(5, 300, maxDelay);
 			const ctx: RetryContext = {
-				attempt: 5, // Большое значение, чтобы превысить maxDelay
+				attempt: 5, // Large value to exceed maxDelay
 				config: { url: "test", method: "GET" as const }
 			};
 

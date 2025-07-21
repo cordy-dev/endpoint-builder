@@ -26,7 +26,6 @@ describe("HttpClient", () => {
 			expect(client.defaults.baseUrl).toBe("");
 			expect(client.defaults.auth).toBeNull();
 			expect(client.defaults.dedupe).toBe(false);
-			expect(client.defaults.mock).toBe(false);
 		});
 
 		it("должен применять пользовательские параметры", () => {

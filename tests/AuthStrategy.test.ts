@@ -7,7 +7,7 @@ import { MockRequest } from "./utils/test-helpers";
 
 describe("ApiKeyStrategy", () => {
 	describe("enrich", () => {
-		it("должен добавлять API ключ в заголовок по умолчанию", async () => {
+		it("should add API key to header by default", async () => {
 			const apiKey = "test-api-key-123";
 			const strategy = new ApiKeyStrategy("X-API-Key", apiKey);
 
@@ -17,18 +17,18 @@ describe("ApiKeyStrategy", () => {
 			expect((headers as any)["X-API-Key"]).toBe(apiKey);
 		});
 
-		it("должен добавлять API ключ как query параметр, если asQueryParam=true", async () => {
+		it("should add API key as query parameter if asQueryParam=true", async () => {
 			const apiKey = "test-api-key-123";
 			const strategy = new ApiKeyStrategy("api_key", apiKey, true);
 
 			const request = new MockRequest("https://api.example.com/data");
 			const headers = await strategy.enrich(request as any);
 
-			// Headers должен быть пустым, т.к. ключ добавлен в URL
+			// Headers should be empty since the key is added to URL
 			expect(Object.keys(headers).length).toBe(0);
 
-			// Нужно проверить, изменился ли URL через Object.defineProperty
-			// Это сложно протестировать напрямую, поэтому можно проверить, что вызван Object.defineProperty
+			// Need to check if URL was modified via Object.defineProperty
+			// This is difficult to test directly, so we could verify that Object.defineProperty was called
 		});
 	});
 });
@@ -44,17 +44,19 @@ describe("OpaqueTokenStrategy", () => {
 	});
 
 	describe("enrich", () => {
-		it("должен добавлять токен доступа в заголовок Authorization", async () => {
-			// Сохраняем токены в хранилище перед тестом
+		it("should add access token to Authorization header", async () => {
+			// Save tokens to storage before test
 			await storage.set("tokens", { access: "access-token-123" });
 
-			const headers = await strategy.enrich();
+			const req = new MockRequest("https://api.example.com/data");
+			const headers = await strategy.enrich(req as any);
 
 			expect((headers as any)["Authorization"]).toBe("Bearer access-token-123");
 		});
 
-		it("должен возвращать пустые заголовки, если токен отсутствует", async () => {
-			const headers = await strategy.enrich();
+		it("should return empty headers if token is missing", async () => {
+			const req = new MockRequest("https://api.example.com/data");
+			const headers = await strategy.enrich(req as any);
 
 			expect(Object.keys(headers).length).toBe(0);
 		});
@@ -71,14 +73,14 @@ describe("OpaqueTokenStrategy", () => {
 			global.fetch = originalFetch;
 		});
 
-		it("должен обновлять токены, если получен 401", async () => {
-			// Сохраняем токены в хранилище
+		it("should refresh tokens when receiving 401", async () => {
+			// Save tokens to storage
 			await storage.set("tokens", {
 				access: "expired-access-token",
 				refresh: "refresh-token-123"
 			});
 
-			// Мокаем fetch для эндпоинта обновления токенов
+			// Mock fetch for token refresh endpoint
 			global.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				json: () => Promise.resolve({ access: "new-access-token", refresh: "new-refresh-token" })
@@ -95,7 +97,7 @@ describe("OpaqueTokenStrategy", () => {
 				body: JSON.stringify({ token: "refresh-token-123" })
 			}));
 
-			// Проверяем, что новые токены сохранены
+			// Verify that new tokens are saved
 			const newTokens = await storage.get("tokens");
 			expect(newTokens).toEqual({
 				access: "new-access-token",
@@ -103,7 +105,7 @@ describe("OpaqueTokenStrategy", () => {
 			});
 		});
 
-		it("не должен обновлять токены, если статус не 401/403", async () => {
+		it("should not refresh tokens if status is not 401/403", async () => {
 			await storage.set("tokens", {
 				access: "access-token",
 				refresh: "refresh-token"
@@ -117,7 +119,7 @@ describe("OpaqueTokenStrategy", () => {
 			expect(refreshed).toBe(false);
 		});
 
-		it("должен возвращать false, если нет refresh токена", async () => {
+		it("should return false if refresh token is missing", async () => {
 			await storage.set("tokens", { access: "access-token" });
 
 			const req = new MockRequest("https://api.example.com/data");
@@ -128,13 +130,13 @@ describe("OpaqueTokenStrategy", () => {
 			expect(refreshed).toBe(false);
 		});
 
-		it("должен возвращать false, если API обновления вернул ошибку", async () => {
+		it("should return false if refresh API returns an error", async () => {
 			await storage.set("tokens", {
 				access: "access-token",
 				refresh: "invalid-refresh-token"
 			});
 
-			// Мокаем fetch с ошибкой
+			// Mock fetch with error response
 			global.fetch = vi.fn().mockResolvedValue({
 				ok: false,
 				status: 400
