@@ -29,7 +29,6 @@ export default tseslint.config(
 			},
 		},
 	},
-
 	{
 		plugins: {
 			"unused-imports": unusedImports,
@@ -64,9 +63,7 @@ export default tseslint.config(
 			"@typescript-eslint/no-unused-vars": "off",
 			"@typescript-eslint/no-misused-promises": "off"
 
-		},
-		settings: { react: { version: "detect" } },
-
+		}
 	},
 
 	// 6. Special import groups for src/**

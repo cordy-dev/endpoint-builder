@@ -35,7 +35,8 @@
 		"release": "bumpp && npm publish",
 		"prepublishOnly": "npm run build",
 		"lint": "eslint",
-		"lint:fix": "eslint --fix"
+		"lint:fix": "eslint --fix",
+		"lint-staged": "lint-staged"
 	},
 	"devDependencies": {
 		"@eslint/css": "^0.10.0",
