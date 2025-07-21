@@ -1,24 +1,34 @@
-export function toQuery<Q extends Record<string, unknown>>(q: Q | undefined): string {
-	if (!q) return "";
+/**
+ * Convert an object to a URL query string
+ * @param params - Query parameters object
+ * @returns URL-encoded query string
+ */
+export function toQuery<Q extends Record<string, unknown>>(params: Q | undefined): string {
+	if (!params) {
+		return "";
+	}
 
-	// Используем URLSearchParams для базовой кодировки
-	const sp = new URLSearchParams();
-	Object.entries(q).forEach(([k, v]) => {
-		if (v === undefined || v === null) return;
+	const searchParams = new URLSearchParams();
 
-		const value =
-			typeof v === "object"
-				? JSON.stringify(v)                              // encode objects explicitly
-				: typeof v === "string" ||
-				  typeof v === "number" ||
-				  typeof v === "boolean" ||
-				  typeof v === "bigint"
-					? String(v)                                      // primitives are safe to stringify
-					: undefined;                                     // skip symbols/functions etc.
+	for (const [key, value] of Object.entries(params)) {
+		if (value === undefined || value === null) {
+			continue;
+		}
 
-		if (value !== undefined) sp.append(k, value);
-	});
+		let stringValue: string;
 
-	// Форматируем строку запроса с %20 вместо + для пробелов, как ожидается в тестах
-	return sp.toString().replace(/\+/g, "%20");
+		if (typeof value === "object") {
+			stringValue = JSON.stringify(value);
+		} else if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+			stringValue = String(value);
+		} else {
+			// Skip symbols, functions, etc.
+			continue;
+		}
+
+		searchParams.append(key, stringValue);
+	}
+
+	// Format query string with %20 instead of + for spaces, as expected by tests
+	return searchParams.toString().replace(/\+/g, "%20");
 }

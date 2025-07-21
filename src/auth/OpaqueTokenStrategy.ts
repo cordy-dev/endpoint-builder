@@ -1,4 +1,5 @@
 import type { PersistStorage } from "../storage/PersistStorage";
+import type { HttpHeaders } from "../types";
 import type { AuthStrategy } from "./AuthStrategy";
 
 export interface OpaqueTokens { access: string; refresh?: string; }
@@ -17,7 +18,7 @@ export class OpaqueTokenStrategy implements AuthStrategy {
 		await this.storage.set("tokens", t);
 	}
 
-	async enrich(): Promise<Partial<HeadersInit>> {
+	async enrich(_req: Request): Promise<Partial<HttpHeaders>> {
 		const tokens = await this._fetchTokens();
 		return tokens?.access ? { [this.headerName]: `Bearer ${tokens.access}` } : {};
 	}

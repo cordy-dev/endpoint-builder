@@ -1,7 +1,7 @@
 import type { PersistStorage } from "./PersistStorage";
 
 export class LocalStoragePersist implements PersistStorage {
-	get<T>(k: string): Promise<T | undefined> {              // JSON.parse может бросить, ловим
+	get<T>(k: string): Promise<T | undefined> {              // JSON.parse might throw, we need to catch it
 		const value = localStorage.getItem(k);
 		if (value === null) return Promise.resolve(undefined);
 		try {

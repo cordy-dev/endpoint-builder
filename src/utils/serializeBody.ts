@@ -1,23 +1,41 @@
 import type { HttpHeaders } from "../types";
 
+/**
+ * Serialize request body based on content type and body type
+ * @param body - Request body to serialize
+ * @param headers - Request headers to check for Content-Type
+ * @returns Serialized body or undefined if body is null/undefined
+ */
 export function serializeBody<B>(body: B, headers: HttpHeaders): B | string | undefined {
-	if (body === undefined || body === null) return undefined;
+	// Return undefined for null/undefined bodies
+	if (body === undefined || body === null) {
+		return undefined;
+	}
 
-	// Не преобразовываем веб-API объекты
-	if (body instanceof FormData ||
-	    body instanceof Blob ||
-	    body instanceof ArrayBuffer ||
-	    body instanceof ReadableStream) {
+	// Don't transform Web API objects
+	if (
+		body instanceof FormData ||
+		body instanceof Blob ||
+		body instanceof ArrayBuffer ||
+		body instanceof ReadableStream
+	) {
 		return body;
 	}
 
-	// Проверка заголовка Content-Type (в любом регистре)
-	const contentTypeHeader = Object.keys(headers).find(
-		k => k.toLowerCase() === "content-type"
-	);
-	const ct = contentTypeHeader ? headers[contentTypeHeader] as string | undefined : undefined;
+	// Check Content-Type header (case-insensitive)
+	let contentType: string | undefined;
 
-	// Отправляем JSON, если в заголовках указан application/json или это объект (но не FormData и не другие бинарные типы)
-	const sendJson = ct?.includes("application/json") ?? (typeof body === "object");
-	return sendJson ? JSON.stringify(body) : body;
+	// More efficient content-type lookup
+	for (const key of Object.keys(headers)) {
+		if (key.toLowerCase() === "content-type") {
+			contentType = headers[key] as string;
+			break;
+		}
+	}
+
+	// Send JSON if content-type is application/json or body is an object
+	// (but not a Web API object which we already checked above)
+	const shouldSendJson = contentType?.includes("application/json") ?? (typeof body === "object");
+
+	return shouldSendJson ? JSON.stringify(body) : body;
 }

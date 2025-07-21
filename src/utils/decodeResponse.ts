@@ -1,29 +1,46 @@
 import type { HttpRequestConfig } from "../types";
 
-export async function decodeResponse<T>(res: Response, cfg: HttpRequestConfig): Promise<T> {
-	// Обрабатываем 204 No Content и другие случаи с пустым телом
-	if (res.status === 204 || res.headers.get("Content-Length") === "0") {
+/**
+ * Decode response body based on response type and content type
+ * @param response - Fetch Response object
+ * @param config - Request configuration
+ * @returns Decoded response body
+ */
+export async function decodeResponse<T>(response: Response, config: HttpRequestConfig): Promise<T> {
+	// Handle empty responses (204 No Content or empty body)
+	if (response.status === 204 || response.headers.get("Content-Length") === "0") {
 		return undefined as unknown as T;
 	}
 
-	const explicit = cfg.responseType;
-	if (explicit === "text")
-		return await res.text() as unknown as T;
+	// Prioritize explicit response type from request config
+	const responseType = config.responseType;
 
-	if (explicit === "blob")
-		return await res.blob() as unknown as T;
+	if (responseType) {
+		switch (responseType) {
+			case "text":
+				return await response.text() as unknown as T;
+			case "blob":
+				return await response.blob() as unknown as T;
+			case "arraybuffer":
+				return await response.arrayBuffer() as unknown as T;
+			case "stream":
+				return response.body! as unknown as T;
+		}
+	}
 
-	if (explicit === "arraybuffer")
-		return await res.arrayBuffer() as unknown as T;
-	if (explicit === "stream")
-		return res.body! as unknown as T;
+	// Auto-detect based on Content-Type header
+	const contentType = response.headers.get("Content-Type") ?? "";
 
-	const contentType = res.headers.get("Content-Type") ?? "";
-	if (contentType.includes("application/json"))
-		return (await res.json()) as T;
+	// JSON response
+	if (contentType.includes("application/json")) {
+		return await response.json() as T;
+	}
 
-	if (contentType.startsWith("text/"))
-		return (await res.text()) as unknown as T;
+	// Text response
+	if (contentType.startsWith("text/")) {
+		return await response.text() as unknown as T;
+	}
 
-	return (await res.blob()) as unknown as T;
+	// Default to blob for binary data
+	return await response.blob() as unknown as T;
 }
