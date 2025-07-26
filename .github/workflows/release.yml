@@ -14,9 +14,14 @@ jobs:
         permissions:
             contents: read
             id-token: write # to enable use of OIDC for npm provenance
+            actions: read # for provenance
+            attestations: write # for provenance
 
         steps:
             - uses: actions/checkout@v4
+              with:
+                  # Ensure we have full git history for provenance
+                  fetch-depth: 0
             - uses: actions/setup-node@v4
               with:
                   node-version: 22
@@ -33,15 +38,33 @@ jobs:
               run: npm run test
 
             # if the release is not a pre-release, publish to npm as latest
-            - name: Publish
+            - name: Publish with provenance
               if: github.event.release.prerelease == false
-              run: npm publish --provenance # remove the --provenance flag if you don't want to use npm provenance, or having issues with it
+              id: publish_with_provenance
+              continue-on-error: true
+              run: npm publish --provenance
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+            # Fallback: publish without provenance if the above fails
+            - name: Publish without provenance (fallback)
+              if: github.event.release.prerelease == false && steps.publish_with_provenance.outcome == 'failure'
+              run: npm publish
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
             # if the release is a pre-release, publish to npm using the beta tag
-            - name: Publish [beta]
+            - name: Publish [beta] with provenance
               if: github.event.release.prerelease == true
-              run: npm publish --tag beta --provenance # remove the --provenance flag if you don't want to use npm provenance, or having issues with it
+              id: publish_beta_with_provenance
+              continue-on-error: true
+              run: npm publish --tag beta --provenance
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+            # Fallback: publish beta without provenance if the above fails
+            - name: Publish [beta] without provenance (fallback)
+              if: github.event.release.prerelease == true && steps.publish_beta_with_provenance.outcome == 'failure'
+              run: npm publish --tag beta
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
