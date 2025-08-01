@@ -233,10 +233,33 @@ export class HttpClient {
 		return parts.join("|");
 	}
 
+	private resolveUrl(baseUrl: string, path: string): URL {
+		// Если путь пустой, возвращаем базовый URL
+		if (!path) {
+			return new URL(baseUrl);
+		}
+
+		// Если путь начинается с протокола (полный URL), используем его как есть
+		if (path.match(/^https?:\/\//)) {
+			return new URL(path);
+		}
+
+		// Нормализуем baseUrl - убираем завершающий слеш
+		const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+
+		// Нормализуем путь - убираем начальный слеш для правильного объединения
+		const normalizedPath = path.replace(/^\//, "");
+
+		// Объединяем с помощью слеша
+		const fullUrl = `${normalizedBaseUrl}/${normalizedPath}`;
+
+		return new URL(fullUrl);
+	}
+
 	private async _buildConfig<T = any, B extends BodyLike = BodyLike, Q extends Record<string, unknown> | undefined = undefined>(rb: RequestBuilder<T, B, Q>): Promise<HttpRequestConfig> {
 		// Build URL with query parameters
 		const baseUrl = this.defaults.baseUrl || "http://localhost";
-		const url = new URL(rb.input, baseUrl);
+		const url = this.resolveUrl(baseUrl, rb.input);
 		if (rb._query) {
 			url.search = toQuery(rb._query);
 		}
