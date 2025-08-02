@@ -148,7 +148,7 @@ describe("RequestBuilder", () => {
 		it("should set authentication strategy", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const authStrategy = {
-				enrich: vi.fn().mockResolvedValue({ Authorization: "Bearer token123" })
+				enrichRequest: vi.fn().mockResolvedValue({ Authorization: "Bearer token123" })
 			};
 
 			builder.auth(authStrategy);
