@@ -1,70 +1,196 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
-
-name: Publish
+name: Release & Publish
 
 on:
     release:
-        types: [created]
+        types: [published]
+
+permissions:
+    contents: read
+    id-token: write # for provenance
+    attestations: write # for provenance
 
 jobs:
-    test-and-npm-publish:
-        name: Build, Test & Publish
+    validate-release:
+        name: Validate Release
         runs-on: ubuntu-latest
-        permissions:
-            contents: read
-            id-token: write # to enable use of OIDC for npm provenance
-            actions: read # for provenance
-            attestations: write # for provenance
+        timeout-minutes: 15
+        outputs:
+            is-prerelease: ${{ steps.check-prerelease.outputs.prerelease }}
+            version: ${{ steps.get-version.outputs.version }}
 
         steps:
-            - uses: actions/checkout@v4
+            - name: Checkout code
+              uses: actions/checkout@v4
               with:
-                  # Ensure we have full git history for provenance
-                  fetch-depth: 0
-            - uses: actions/setup-node@v4
+                  fetch-depth: 0 # Full history for provenance
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
               with:
                   node-version: 22
-                  cache: "npm"
-                  registry-url: "https://registry.npmjs.org"
+                  cache: npm
+                  registry-url: https://registry.npmjs.org
 
             - name: Install dependencies
-              run: npm ci
-            - name: Update npm
-              run: npm install -g npm@latest # Ensure npm is up-to-date. Provenance requires v9.6.0 or higher.
-            - name: Build
+              run: npm ci --prefer-offline
+
+            - name: Lint code
+              run: npm run lint
+
+            - name: Type check
+              run: npm run typecheck
+
+            - name: Security audit
+              run: npm audit --audit-level=moderate
+
+            - name: Build project
               run: npm run build
-            - name: Test
-              run: npm run test
 
-            # if the release is not a pre-release, publish to npm as latest
-            - name: Publish with provenance
-              if: github.event.release.prerelease == false
-              id: publish_with_provenance
-              continue-on-error: true
-              run: npm publish --provenance
+            - name: Run tests
+              run: npm test
+
+            - name: Verify package contents
+              run: |
+                  npm pack --dry-run
+                  echo "📋 Package will include:" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                  npm pack --dry-run 2>&1 | grep -A 100 "npm notice" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+            - name: Get version
+              id: get-version
+              run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+            - name: Check if prerelease
+              id: check-prerelease
+              run: |
+                  if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+                    echo "prerelease=true" >> $GITHUB_OUTPUT
+                  else
+                    echo "prerelease=false" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Verify version matches release tag
+              run: |
+                  PACKAGE_VERSION="v${{ steps.get-version.outputs.version }}"
+                  RELEASE_TAG="${{ github.event.release.tag_name }}"
+                  if [[ "$PACKAGE_VERSION" != "$RELEASE_TAG" ]]; then
+                    echo "❌ Version mismatch: package.json ($PACKAGE_VERSION) != release tag ($RELEASE_TAG)"
+                    exit 1
+                  fi
+                  echo "✅ Version matches: $PACKAGE_VERSION"
+
+    publish-npm:
+        name: Publish to NPM
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        needs: validate-release
+        environment: npm
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+                  registry-url: https://registry.npmjs.org
+
+            - name: Install dependencies
+              run: npm ci --prefer-offline
+
+            - name: Build project
+              run: npm run build
+
+            - name: Publish to NPM (latest)
+              if: needs.validate-release.outputs.is-prerelease == 'false'
+              run: |
+                  # Try with provenance first
+                  if ! npm publish --provenance; then
+                    echo "⚠️ Provenance publication failed, trying without provenance..."
+                    npm publish
+                  fi
+                  echo "✅ Published @cordy/endpoint-builder@${{ needs.validate-release.outputs.version }} to NPM"
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-            # Fallback: publish without provenance if the above fails
-            - name: Publish without provenance (fallback)
-              if: github.event.release.prerelease == false && steps.publish_with_provenance.outcome == 'failure'
-              run: npm publish
+            - name: Publish to NPM (beta)
+              if: needs.validate-release.outputs.is-prerelease == 'true'
+              run: |
+                  # Try with provenance first
+                  if ! npm publish --tag beta --provenance; then
+                    echo "⚠️ Provenance publication failed, trying without provenance..."
+                    npm publish --tag beta
+                  fi
+                  echo "✅ Published @cordy/endpoint-builder@${{ needs.validate-release.outputs.version }} (beta) to NPM"
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-            # if the release is a pre-release, publish to npm using the beta tag
-            - name: Publish [beta] with provenance
-              if: github.event.release.prerelease == true
-              id: publish_beta_with_provenance
-              continue-on-error: true
-              run: npm publish --tag beta --provenance
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    create-github-release-assets:
+        name: Create Release Assets
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        needs: [validate-release, publish-npm]
+        if: always() && needs.validate-release.result == 'success'
 
-            # Fallback: publish beta without provenance if the above fails
-            - name: Publish [beta] without provenance (fallback)
-              if: github.event.release.prerelease == true && steps.publish_beta_with_provenance.outcome == 'failure'
-              run: npm publish --tag beta
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci --prefer-offline
+
+            - name: Build project
+              run: npm run build
+
+            - name: Create tarball
+              run: npm pack
+
+            - name: Upload release assets
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const fs = require('fs');
+                      const path = require('path');
+
+                      const files = fs.readdirSync('.')
+                        .filter(file => file.endsWith('.tgz'));
+
+                      for (const file of files) {
+                        console.log(`Uploading ${file}...`);
+                        await github.rest.repos.uploadReleaseAsset({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          release_id: ${{ github.event.release.id }},
+                          name: file,
+                          data: fs.readFileSync(file)
+                        });
+                        console.log(`✅ Uploaded ${file}`);
+                      }
+
+    post-release:
+        name: Post Release Actions
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        needs: [publish-npm]
+        if: always() && needs.publish-npm.result == 'success'
+
+        steps:
+            - name: Create release summary
+              run: |
+                  echo "🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Package:** @cordy/endpoint-builder" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Version:** ${{ needs.validate-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **Type:** ${{ needs.validate-release.outputs.is-prerelease == 'true' && 'Pre-release (beta)' || 'Stable release' }}" >> $GITHUB_STEP_SUMMARY
+                  echo "- **NPM:** https://www.npmjs.com/package/@cordy/endpoint-builder" >> $GITHUB_STEP_SUMMARY
+                  echo "- **GitHub:** ${{ github.event.release.html_url }}" >> $GITHUB_STEP_SUMMARY

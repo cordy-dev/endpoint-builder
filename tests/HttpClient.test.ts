@@ -42,7 +42,7 @@ describe("HttpClient", () => {
 		});
 	});
 
-	describe("методы HTTP запросов", () => {
+	describe("HTTP request methods", () => {
 		it("должен создавать GET запрос", () => {
 			const client = new HttpClient();
 			const builder = client.get("/users");

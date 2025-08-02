@@ -1,5 +1,5 @@
 import type { AuthStrategy } from "../auth/AuthStrategy";
-import { JitteredExponentialBackoffRetryStrategy } from "../retry/JitteredExponentialBackoffRetryStrategy";
+import { ExponentialRetryStrategy } from "../retry/ExponentialRetryStrategy";
 import type { RetryContext, RetryStrategy } from "../retry/RetryStrategy";
 import { LocalStoragePersist } from "../storage/LocalStoragePersist";
 import type { PersistStorage } from "../storage/PersistStorage";
@@ -36,7 +36,7 @@ export class HttpClient {
 			dedupe: false,
 			defaultHeaders: {},
 			responseType: undefined,
-			retryStrategy: new JitteredExponentialBackoffRetryStrategy(),
+			retryStrategy: new ExponentialRetryStrategy(),
 			...opts,
 		} as Required<HttpClientOptions>;
 	}
@@ -138,10 +138,13 @@ export class HttpClient {
 				}
 
 				// Handle token refresh if authentication fails
-				if (response &&
-				    this.defaults.auth?.refresh &&
-				    await this.defaults.auth.refresh(new Request(config.url), response)) {
-					continue; // retry immediately, don't count as retry attempt
+				if (response && this.defaults.auth) {
+					// Use new method name, fallback to deprecated one for backward compatibility
+					if (this.defaults.auth.handleRequestError) {
+						if (await this.defaults.auth.handleRequestError(new Request(config.url), response)) {
+							continue; // retry immediately, don't count as retry attempt
+						}
+					}
 				}
 
 				// Handle retry logic for error responses
@@ -234,23 +237,23 @@ export class HttpClient {
 	}
 
 	private resolveUrl(baseUrl: string, path: string): URL {
-		// Если путь пустой, возвращаем базовый URL
+		// If path is empty, return base URL
 		if (!path) {
 			return new URL(baseUrl);
 		}
 
-		// Если путь начинается с протокола (полный URL), используем его как есть
+		// If path starts with protocol (full URL), use it as is
 		if (path.match(/^https?:\/\//)) {
 			return new URL(path);
 		}
 
-		// Нормализуем baseUrl - убираем завершающий слеш
+		// Normalize baseUrl - remove trailing slash
 		const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
 
-		// Нормализуем путь - убираем начальный слеш для правильного объединения
+		// Normalize path - remove leading slash for proper joining
 		const normalizedPath = path.replace(/^\//, "");
 
-		// Объединяем с помощью слеша
+		// Join with slash
 		const fullUrl = `${normalizedBaseUrl}/${normalizedPath}`;
 
 		return new URL(fullUrl);
@@ -273,7 +276,8 @@ export class HttpClient {
 		// Add authentication headers if available
 		const auth = rb._auth ?? this.defaults.auth;
 		if (auth) {
-			const authHeaders = await auth.enrich(new Request(url.toString()));
+			// Use new method name, fallback to deprecated one for backward compatibility
+			const authHeaders = await auth.enrichRequest(new Request(url.toString()));
 			if (Object.keys(authHeaders).length > 0) {
 				headers = mergeHeaders(headers, authHeaders);
 			}

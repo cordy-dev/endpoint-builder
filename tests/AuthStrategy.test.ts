@@ -6,13 +6,13 @@ import { MemoryStoragePersist } from "../src/storage/MemoryStoragePersist";
 import { MockRequest } from "./utils/test-helpers";
 
 describe("ApiKeyStrategy", () => {
-	describe("enrich", () => {
+	describe("enrichRequest", () => {
 		it("should add API key to header by default", async () => {
 			const apiKey = "test-api-key-123";
 			const strategy = new ApiKeyStrategy("X-API-Key", apiKey);
 
 			const request = new MockRequest("https://api.example.com/data");
-			const headers = await strategy.enrich(request as any);
+			const headers = await strategy.enrichRequest(request as any);
 
 			expect((headers as any)["X-API-Key"]).toBe(apiKey);
 		});
@@ -22,7 +22,7 @@ describe("ApiKeyStrategy", () => {
 			const strategy = new ApiKeyStrategy("api_key", apiKey, true);
 
 			const request = new MockRequest("https://api.example.com/data");
-			const headers = await strategy.enrich(request as any);
+			const headers = await strategy.enrichRequest(request as any);
 
 			// Headers should be empty since the key is added to URL
 			expect(Object.keys(headers).length).toBe(0);
@@ -43,26 +43,26 @@ describe("OpaqueTokenStrategy", () => {
 		strategy = new OpaqueTokenStrategy(storage, refreshEndpoint);
 	});
 
-	describe("enrich", () => {
+	describe("enrichRequest", () => {
 		it("should add access token to Authorization header", async () => {
 			// Save tokens to storage before test
 			await storage.set("tokens", { access: "access-token-123" });
 
 			const req = new MockRequest("https://api.example.com/data");
-			const headers = await strategy.enrich(req as any);
+			const headers = await strategy.enrichRequest(req as any);
 
 			expect((headers as any)["Authorization"]).toBe("Bearer access-token-123");
 		});
 
 		it("should return empty headers if token is missing", async () => {
 			const req = new MockRequest("https://api.example.com/data");
-			const headers = await strategy.enrich(req as any);
+			const headers = await strategy.enrichRequest(req as any);
 
 			expect(Object.keys(headers).length).toBe(0);
 		});
 	});
 
-	describe("refresh", () => {
+	describe("handleRequestError", () => {
 		let originalFetch: any;
 
 		beforeEach(() => {
@@ -89,7 +89,7 @@ describe("OpaqueTokenStrategy", () => {
 			const req = new MockRequest("https://api.example.com/data");
 			const res = new Response(null, { status: 401 });
 
-			const refreshed = await strategy.refresh(req as any, res);
+			const refreshed = await strategy.handleRequestError(req as any, res);
 
 			expect(refreshed).toBe(true);
 			expect(global.fetch).toHaveBeenCalledWith(refreshEndpoint, expect.objectContaining({
@@ -114,7 +114,7 @@ describe("OpaqueTokenStrategy", () => {
 			const req = new MockRequest("https://api.example.com/data");
 			const res = new Response(null, { status: 200 });
 
-			const refreshed = await strategy.refresh(req as any, res);
+			const refreshed = await strategy.handleRequestError(req as any, res);
 
 			expect(refreshed).toBe(false);
 		});
@@ -125,7 +125,7 @@ describe("OpaqueTokenStrategy", () => {
 			const req = new MockRequest("https://api.example.com/data");
 			const res = new Response(null, { status: 401 });
 
-			const refreshed = await strategy.refresh(req as any, res);
+			const refreshed = await strategy.handleRequestError(req as any, res);
 
 			expect(refreshed).toBe(false);
 		});
@@ -145,7 +145,7 @@ describe("OpaqueTokenStrategy", () => {
 			const req = new MockRequest("https://api.example.com/data");
 			const res = new Response(null, { status: 401 });
 
-			const refreshed = await strategy.refresh(req as any, res);
+			const refreshed = await strategy.handleRequestError(req as any, res);
 
 			expect(refreshed).toBe(false);
 		});

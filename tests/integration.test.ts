@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiKeyStrategy } from "../src/auth/ApiKeyStrategy";
 import { HttpClient } from "../src/core/HttpClient";
-import { JitteredExponentialBackoffRetryStrategy } from "../src/retry/JitteredExponentialBackoffRetryStrategy";
+import { ExponentialRetryStrategy } from "../src/retry/ExponentialRetryStrategy";
 import { MemoryStoragePersist } from "../src/storage/MemoryStoragePersist";
 import { mockFetch } from "./utils/test-helpers";
 
-describe("Интеграционные тесты endpoint-builder", () => {
-	// Сохраняем оригинальный fetch для восстановления после тестов
+describe("Integration tests for endpoint-builder", () => {
+	// Save original fetch for restoration after tests
 	const originalFetch = global.fetch;
 
 	afterEach(() => {
@@ -16,7 +16,7 @@ describe("Интеграционные тесты endpoint-builder", () => {
 		vi.resetAllMocks();
 	});
 
-	describe("Полный пример использования", () => {
+	   describe("Complete usage example", () => {
 		it("должен создавать запрос с аутентификацией, выполнять его и обрабатывать ответ", async () => {
 			// Мокаем ответ сервера
 			const mockResponse = {
@@ -33,7 +33,7 @@ describe("Интеграционные тесты endpoint-builder", () => {
 			const authStrategy = new ApiKeyStrategy("X-API-Key", "test-api-key-12345");
 
 			// Создаем стратегию повторных попыток с максимум 2 попытками
-			const retryStrategy = new JitteredExponentialBackoffRetryStrategy(2, 100, 1000);
+			const retryStrategy = new ExponentialRetryStrategy(2, 100, 1000);
 
 			// Создаем HTTP клиент со всеми настройками
 			const client = new HttpClient({
@@ -122,7 +122,7 @@ describe("Интеграционные тесты endpoint-builder", () => {
 			// Создаем HTTP клиент с настроенной стратегией повторных попыток
 			const client = new HttpClient({
 				baseUrl: "https://api.example.com",
-				retryStrategy: new JitteredExponentialBackoffRetryStrategy(3, 1) // Маленькая задержка для тестов
+				retryStrategy: new ExponentialRetryStrategy(3, 1) // Маленькая задержка для тестов
 			});
 
 			// Выполняем запрос

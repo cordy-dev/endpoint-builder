@@ -1,6 +1,6 @@
 import type { RetryContext, RetryStrategy } from "./RetryStrategy";
 
-export class JitteredExponentialBackoffRetryStrategy implements RetryStrategy {
+export class ExponentialRetryStrategy implements RetryStrategy {
 	constructor(
 		private maxAttempts = 3,
 		private base = 300,

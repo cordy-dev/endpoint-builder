@@ -2,62 +2,166 @@ name: CI
 
 on:
     push:
-        branches: ["main"]
+        branches: [main]
     pull_request:
-        branches: ["main"]
+        branches: [main]
 
 concurrency:
     group: ci-${{ github.event.pull_request.number || github.ref }}
     cancel-in-progress: true
 
 jobs:
-    check: # this job does all tests so it can fail fast and cancel other jobs
-        name: Fail Fast - Check Code Style, Lint, Build & Test
+    lint-and-typecheck:
+        name: Code Quality & Type Check
         runs-on: ubuntu-latest
+        timeout-minutes: 10
         permissions:
             contents: read
 
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
               with:
                   node-version: 22
-                  cache: "npm"
+                  cache: npm
 
             - name: Install dependencies
-              run: npm ci
-            - name: Check linting
-              run: npm run lint
-            - name: Check build
-              run: npm run build
-            - name: Check testes
-              run: npm run test
-            # Uncomment the following line to check test coverage
-            # - name: Check testes & coverage
-            #   run: npm run test:coverage
+              run: npm ci --prefer-offline
 
-    node-tests:
-        name: Node.js - Build & Test
+            - name: Lint code
+              run: npm run lint
+
+            - name: Type check
+              run: npm run typecheck
+
+    security:
+        name: Security Audit
         runs-on: ubuntu-latest
-        needs: check
-        if: success()
+        timeout-minutes: 5
+        permissions:
+            contents: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci --prefer-offline
+
+            - name: Run security audit
+              run: npm audit --audit-level=moderate
+
+            - name: Check for known vulnerabilities
+              run: npx audit-ci --moderate
+
+    build-and-test:
+        name: Build & Test (Node.js ${{ matrix.node-version }})
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        needs: [lint-and-typecheck, security]
         permissions:
             contents: read
 
         strategy:
+            fail-fast: false
             matrix:
-                node-version: [22.x, 24.x]
+                node-version: [18.x, 20.x, 22.x]
+
         steps:
-            - uses: actions/checkout@v4
-            - name: Use Node.js ${{ matrix.node-version }}
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js ${{ matrix.node-version }}
               uses: actions/setup-node@v4
               with:
                   node-version: ${{ matrix.node-version }}
-                  cache: "npm"
+                  cache: npm
 
             - name: Install dependencies
-              run: npm ci
-            - name: Build
+              run: npm ci --prefer-offline
+
+            - name: Build project
               run: npm run build
-            - name: Unit test
+
+            - name: Run tests
               run: npm test
+
+            - name: Generate coverage report
+              run: npx vitest run --coverage --reporter=verbose
+              if: matrix.node-version == '22.x'
+
+            - name: Upload coverage to Codecov
+              uses: codecov/codecov-action@v4
+              if: matrix.node-version == '22.x'
+              with:
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  fail_ci_if_error: false
+
+    test-install:
+        name: Test Package Installation
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        needs: build-and-test
+        if: github.event_name == 'pull_request'
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Build package
+              run: |
+                  npm ci --prefer-offline
+                  npm run build
+                  npm pack
+
+            - name: Test installation in clean environment
+              run: |
+                  mkdir test-install && cd test-install
+                  npm init -y
+                  npm install ../*.tgz
+                  node -e "import('@cordy/endpoint-builder').then(() => console.log('Package imported successfully'))"
+
+    size-check:
+        name: Bundle Size Check
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        needs: build-and-test
+        if: github.event_name == 'pull_request'
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci --prefer-offline
+
+            - name: Build project
+              run: npm run build
+
+            - name: Check bundle size
+              run: |
+                  echo "📦 Bundle Size Report:" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                  find dist -name "*.js" -exec wc -c {} + | sort -n >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

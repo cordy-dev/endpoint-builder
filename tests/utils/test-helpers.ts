@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 
 /**
- * Создает мок для fetch API
+ * Creates a mock for fetch API
  */
 export function mockFetch(responseData: any = {}, status = 200, headers = {}) {
 	const response = new Response(JSON.stringify(responseData), {
@@ -13,7 +13,7 @@ export function mockFetch(responseData: any = {}, status = 200, headers = {}) {
 }
 
 /**
- * Создает мок для localStorage
+ * Creates a mock for localStorage
  */
 export function mockLocalStorage() {
 	const store: Record<string, string> = {};
@@ -35,7 +35,7 @@ export function mockLocalStorage() {
 }
 
 /**
- * Мок для Request API
+ * Mock for Request API
  */
 export class MockRequest {
 	url: string;

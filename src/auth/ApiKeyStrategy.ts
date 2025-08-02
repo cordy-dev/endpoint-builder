@@ -8,7 +8,11 @@ export class ApiKeyStrategy implements AuthStrategy {
 		private asQueryParam = false,
 	) {}
 
-	enrich(req: Request): Promise<Partial<HttpHeaders>> {
+	/**
+	 * Enriches the request with API key authentication.
+	 * Adds the API key either as a header or query parameter.
+	 */
+	enrichRequest(req: Request): Promise<Partial<HttpHeaders>> {
 		if (this.asQueryParam) {
 			const u = new URL(req.url);
 			u.searchParams.set(this.headerName, this.key);

@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { JitteredExponentialBackoffRetryStrategy } from "../src/retry/JitteredExponentialBackoffRetryStrategy";
+import { ExponentialRetryStrategy } from "../src/retry/ExponentialRetryStrategy";
 import type { RetryContext } from "../src/retry/RetryStrategy";
 
 describe("JitteredExponentialBackoffRetryStrategy", () => {
 	describe("shouldRetry", () => {
 		it("should return true for network errors (missing response)", () => {
-			const strategy = new JitteredExponentialBackoffRetryStrategy();
+			const strategy = new ExponentialRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
 				config: { url: "test", method: "GET" as const }
@@ -14,7 +14,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 
 			expect(strategy.shouldRetry(ctx)).toBe(true);
 		});		it("should return true for 5xx errors", () => {
-			const strategy = new JitteredExponentialBackoffRetryStrategy();
+			const strategy = new ExponentialRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
 				response: new Response(null, { status: 500 }),
@@ -25,7 +25,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 		});
 
 		it("should return true for 429 (too many requests)", () => {
-			const strategy = new JitteredExponentialBackoffRetryStrategy();
+			const strategy = new ExponentialRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
 				response: new Response(null, { status: 429 }),
@@ -34,7 +34,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 
 			expect(strategy.shouldRetry(ctx)).toBe(true);
 		});		it("should return false for successful responses", () => {
-			const strategy = new JitteredExponentialBackoffRetryStrategy();
+			const strategy = new ExponentialRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
 				response: new Response(null, { status: 200 }),
@@ -45,7 +45,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 		});
 
 		it("should return false for 4xx errors (except 429)", () => {
-			const strategy = new JitteredExponentialBackoffRetryStrategy();
+			const strategy = new ExponentialRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
 				response: new Response(null, { status: 404 }),
@@ -56,7 +56,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 		});
 
 		it("should return false if maximum number of attempts is reached", () => {
-			const strategy = new JitteredExponentialBackoffRetryStrategy(3);
+			const strategy = new ExponentialRetryStrategy(3);
 			const ctx: RetryContext = {
 				attempt: 3,
 				response: new Response(null, { status: 500 }),
@@ -78,7 +78,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 		});
 
 		it("should return the correct delay for the first attempt", () => {
-			const strategy = new JitteredExponentialBackoffRetryStrategy(3, 300);
+			const strategy = new ExponentialRetryStrategy(3, 300);
 			const ctx: RetryContext = {
 				attempt: 1,
 				config: { url: "test", method: "GET" as const }
@@ -91,7 +91,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 		});
 
 		it("should return exponentially increasing delay", () => {
-			const strategy = new JitteredExponentialBackoffRetryStrategy(3, 300);
+			const strategy = new ExponentialRetryStrategy(3, 300);
 			const ctx1: RetryContext = {
 				attempt: 1,
 				config: { url: "test", method: "GET" as const }
@@ -123,7 +123,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 
 		it("should limit the maximum delay", () => {
 			const maxDelay = 1000;
-			const strategy = new JitteredExponentialBackoffRetryStrategy(5, 300, maxDelay);
+			const strategy = new ExponentialRetryStrategy(5, 300, maxDelay);
 			const ctx: RetryContext = {
 				attempt: 5, // Large value to exceed maxDelay
 				config: { url: "test", method: "GET" as const }

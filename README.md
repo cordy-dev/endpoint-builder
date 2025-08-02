@@ -33,160 +33,218 @@ pnpm add @cordy/endpoint-builder
 
 ## Quick Start
 
-```typescript
-import { HttpClient } from "@cordy/endpoint-builder";
+### 🚀 Universal API - One Client for All Use Cases
 
-// Create a client instance
-const client = new HttpClient({
+```typescript
+import { createClient } from "@cordy/endpoint-builder";
+
+// Simple usage
+const api = createClient({
 	baseUrl: "https://api.example.com",
+	auth: "your-token-here", // Auto-detects Bearer token
 });
 
-// Make requests
-const users = await client.get("/users").data();
-const newUser = await client.post("/users").json({ name: "John" }).data();
-```
-
-## Core Concepts
-
-### HttpClient
-
-The main class for making HTTP requests. Create an instance with your configuration:
-
-```typescript
-const client = new HttpClient({
-	baseUrl: "https://api.example.com",
-	defaultHeaders: {
-		Accept: "application/json",
-		"X-App-Version": "1.0.0",
-	},
-	dedupe: true, // Enable request deduplication
-	retryStrategy: new JitteredExponentialBackoffRetryStrategy(3, 300, 10000),
+const users = await api.get("/users");
+const newUser = await api.post("/users", {
+	name: "John",
+	email: "john@example.com",
 });
 ```
 
-### Request Builder
-
-All HTTP methods return a `RequestBuilder` instance that allows you to chain methods for configuring the request:
+### 🔧 Advanced Configuration in the Same Client
 
 ```typescript
-const response = await client
-	.get("/users") // HTTP method and path
-	.query({ page: 1, limit: 10 }) // Query parameters
-	.header("X-Request-ID", "123") // Add header
-	.timeout(5000) // Set timeout
-	.retry(customRetryStrategy) // Override retry strategy
-	.dedupe() // Enable deduplication
-	.send(); // Execute and get full response
+import {
+	createClient,
+	ApiKeyStrategy,
+	JitteredExponentialBackoffRetryStrategy,
+} from "@cordy/endpoint-builder";
 
-// Or get just the data
-const data = await client.get("/users").data();
+const api = createClient({
+	baseUrl: "https://api.example.com",
+
+	// Simple options
+	timeout: 10000,
+	retry: true,
+	headers: { "X-App": "MyApp" },
+
+	// Advanced options
+	authStrategy: new ApiKeyStrategy("Custom-Header", "secret"),
+	retryStrategy: new JitteredExponentialBackoffRetryStrategy(5, 1000, 30000),
+	dedupe: true,
+});
+
+// Simple methods
+const users = await api.get("/users");
+
+// Advanced methods on the same client
+const response = await api
+	.request("GET", "/advanced")
+	.timeout(30000)
+	.header("X-Special", "value")
+	.send();
+
+// Full HttpClient access when needed
+const fullControl = await api.httpClient.get("/complex").retry(null).data();
 ```
+
+**[📖 See full Quick Start Guide](./docs/QUICK_START.md)** for comprehensive examples.
 
 ## HTTP Methods
 
-### GET Requests
+All methods are available through the unified `createClient()` API:
+
+### Basic Usage
 
 ```typescript
-// Simple GET
-const user = await client.get("/users/1").data();
+import { createClient } from "@cordy/endpoint-builder";
 
-// With query parameters
-const users = await client.get("/users").query({ page: 2, limit: 20 }).data();
+const api = createClient({ baseUrl: "https://api.example.com" });
 
-// With custom headers
+// GET requests
+const user = await api.get("/users/1");
+const users = await api.get("/users", { query: { page: 2, limit: 20 } });
+
+// POST requests
+const created = await api.post("/users", {
+	name: "Jane",
+	email: "jane@example.com",
+});
+
+// PUT/PATCH requests
+const updated = await api.put("/users/1", { name: "Jane Updated" });
+const patched = await api.patch("/users/1", { name: "Jane Patched" });
+
+// DELETE requests
+const deleted = await api.delete("/users/1");
+
+// Get full response instead of just data
+const response = await api.response("GET", "/users/1");
+console.log(response.status); // 200
+console.log(response.data); // User object
+```
+
+### File Operations
+
+```typescript
+// File upload (simple)
+const fileData = new FormData();
+fileData.append("file", fileInput.files[0]);
+const uploaded = await api.post("/upload", fileData);
+
+// File download
+const fileBlob = await api.get("/files/document.pdf", {
+	headers: { Accept: "application/pdf" },
+});
+```
+
+### Advanced Usage with RequestBuilder
+
+For fine-grained control, use the `.request()` method:
+
+```typescript
+// Advanced request with precise control
+const response = await api
+	.request("POST", "/users")
+	.timeout(5000)
+	.header("X-Custom", "value")
+	.body({ name: "John", email: "john@example.com" })
+	.send();
+
+// File upload with custom headers
+const uploaded = await api
+	.request("POST", "/upload")
+	.timeout(30000)
+	.header("X-Upload-Type", "document")
+	.body(formData)
+	.send();
+```
+
+### Expert Level - Direct HttpClient Access
+
+When you need maximum control:
+
+```typescript
+// Access the underlying HttpClient
+const client = api.httpClient;
+
+// Full control over the request
+const user = await client
+	.get("/users/1")
+	.dedupe(false)
+	.retry(null)
+	.responseType("json")
+	.data();
+
+// Complex authentication override
 const data = await client
-	.get("/protected")
-	.header("Authorization", "Bearer token")
+	.post("/secure")
+	.authStrategy(customAuthStrategy)
+	.json({ sensitive: "data" })
 	.data();
-```
-
-### POST Requests
-
-```typescript
-// JSON body (Content-Type set automatically)
-const created = await client
-	.post("/users")
-	.json({ name: "Jane", email: "jane@example.com" })
-	.data();
-
-// Form data
-const formData = new FormData();
-formData.append("file", fileInput.files[0]);
-formData.append("name", "Document");
-
-const uploaded = await client.post("/upload").body(formData).data();
-
-// URL-encoded form
-const result = await client
-	.post("/form")
-	.form({ username: "john", password: "secret" })
-	.data();
-```
-
-### PUT and PATCH Requests
-
-```typescript
-// Full update
-const updated = await client
-	.put("/users/1")
-	.json({ id: 1, name: "John Updated", email: "john@example.com" })
-	.data();
-
-// Partial update
-const patched = await client
-	.patch("/users/1")
-	.json({ name: "John Updated" })
-	.data();
-```
-
-### DELETE Requests
-
-```typescript
-const response = await client.delete("/users/1").send();
-console.log(response.status); // 200 or 204
 ```
 
 ## Authentication
 
-### API Key Authentication
+### Simple Authentication (Auto-Detection)
+
+The unified API automatically detects common authentication patterns:
 
 ```typescript
-import { HttpClient, ApiKeyStrategy } from "@cordy/endpoint-builder";
+import { createClient } from "@cordy/endpoint-builder";
 
-// API key in header
-const client = new HttpClient({
+// Bearer token (auto-detected)
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new ApiKeyStrategy("X-API-Key", "your-api-key"),
+	auth: "your-token-here", // Automatically becomes "Bearer your-token-here"
 });
 
-// API key as query parameter
-const client = new HttpClient({
+// API key (auto-detected)
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new ApiKeyStrategy("apikey", "your-api-key", true),
+	apiKey: "your-api-key", // Automatically becomes "X-API-Key: your-api-key"
 });
 
-// Bearer token
-const client = new HttpClient({
+// Custom headers
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new ApiKeyStrategy("Authorization", "Bearer your-token"),
+	headers: {
+		Authorization: "Custom your-token",
+		"X-Custom-Auth": "secret",
+	},
 });
 ```
 
-### Token Authentication with Auto-Refresh
+### Advanced Authentication Strategies
+
+For complex scenarios, use explicit strategies:
 
 ```typescript
 import {
-	HttpClient,
+	createClient,
+	ApiKeyStrategy,
 	OpaqueTokenStrategy,
 	LocalStoragePersist,
 } from "@cordy/endpoint-builder";
 
-const client = new HttpClient({
+// Custom API key strategy
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new OpaqueTokenStrategy(
-		new LocalStoragePersist(), // Storage backend
+	authStrategy: new ApiKeyStrategy("X-Custom-API-Key", "your-key"),
+});
+
+// API key as query parameter
+const api = createClient({
+	baseUrl: "https://api.example.com",
+	authStrategy: new ApiKeyStrategy("apikey", "your-key", true), // true = query param
+});
+
+// Token with auto-refresh
+const api = createClient({
+	baseUrl: "https://api.example.com",
+	authStrategy: new OpaqueTokenStrategy(
+		new LocalStoragePersist(), // Storage for tokens
 		"https://api.example.com/auth/refresh", // Refresh endpoint
-		"Authorization", // Header name (optional, default: "Authorization")
 	),
 });
 
@@ -198,10 +256,10 @@ const client = new HttpClient({
 ### Custom Authentication
 
 ```typescript
-import { AuthStrategy } from "@cordy/endpoint-builder";
+import { createClient, AuthStrategy } from "@cordy/endpoint-builder";
 
 class HMACAuthStrategy implements AuthStrategy {
-	async enrich(req: Request): Promise<Partial<HttpHeaders>> {
+	async enrichRequest(req: Request): Promise<Partial<HttpHeaders>> {
 		const timestamp = Date.now().toString();
 		const signature = await this.sign(req, timestamp);
 
@@ -211,7 +269,7 @@ class HMACAuthStrategy implements AuthStrategy {
 		};
 	}
 
-	async refresh(req: Request, res: Response): Promise<boolean> {
+	async handleRequestError(req: Request, res: Response): Promise<boolean> {
 		// Return true to retry the request
 		return false;
 	}
@@ -220,29 +278,57 @@ class HMACAuthStrategy implements AuthStrategy {
 		// Your HMAC signing logic here
 		return "signature";
 	}
+
+	// ============================================
+	// DEPRECATED METHODS (for backward compatibility)
+	// ============================================
+
+	/** @deprecated Use enrichRequest() instead */
+	async enrich(req: Request): Promise<Partial<HttpHeaders>> {
+		return this.enrichRequest(req);
+	}
+
+	/** @deprecated Use handleRequestError() instead */
+	async refresh(req: Request, res: Response): Promise<boolean> {
+		return this.handleRequestError(req, res);
+	}
 }
+
+// Use custom strategy
+const api = createClient({
+	baseUrl: "https://api.example.com",
+	authStrategy: new HMACAuthStrategy(),
+});
 ```
 
 ## Retry Strategies
 
-The library includes a sophisticated retry mechanism with exponential backoff and jitter:
+Configure retry behavior for resilient applications:
 
 ```typescript
-import { JitteredExponentialBackoffRetryStrategy } from "@cordy/endpoint-builder";
+import {
+	createClient,
+	JitteredExponentialBackoffRetryStrategy,
+} from "@cordy/endpoint-builder";
 
-const retryStrategy = new JitteredExponentialBackoffRetryStrategy(
-	5, // maxAttempts (default: 3)
-	500, // baseDelay in ms (default: 300)
-	30000, // maxDelay in ms (default: 10000)
-);
-
-const client = new HttpClient({
+// Simple retry configuration
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	retryStrategy,
+	retry: 3, // Auto-creates retry strategy with 3 attempts
+});
+
+// Advanced retry strategy
+const api = createClient({
+	baseUrl: "https://api.example.com",
+	retryStrategy: new JitteredExponentialBackoffRetryStrategy(
+		5, // maxAttempts (default: 3)
+		500, // baseDelay in ms (default: 300)
+		30000, // maxDelay in ms (default: 10000)
+	),
 });
 
 // Disable retry for specific request
-await client.post("/critical").retry(null).json(data).data();
+const data = await api.request("POST", "/critical").timeout(5000).send();
 ```
 
 The default retry strategy retries on:
@@ -256,11 +342,17 @@ The default retry strategy retries on:
 ### Timeout
 
 ```typescript
-// Set timeout for specific request
-const data = await client
-	.get("/slow-endpoint")
-	.timeout(10000) // 10 seconds
-	.data();
+// Global timeout in createClient
+const api = createClient({
+	baseUrl: "https://api.example.com",
+	timeout: 10000, // 10 seconds default
+});
+
+// Override timeout for specific request
+const data = await api
+	.request("GET", "/slow-endpoint")
+	.timeout(30000) // 30 seconds for this request
+	.send();
 ```
 
 ### Abort Signal
@@ -268,30 +360,41 @@ const data = await client
 ```typescript
 const controller = new AbortController();
 
-// Start request
-const promise = client.get("/large-data").signal(controller.signal).data();
+// Using simple API
+const promise = api.get("/large-data", {
+	signal: controller.signal,
+});
 
-// Cancel request
+// Using advanced API
+const promise = api
+	.request("GET", "/large-data")
+	.signal(controller.signal)
+	.send();
+
+// Cancel request after 5 seconds
 setTimeout(() => controller.abort(), 5000);
 ```
 
 ### Response Types
 
 ```typescript
-// JSON (default)
-const json = await client.get("/api/data").data();
+// Default: auto-detect based on Content-Type
+const data = await api.get("/api/data");
 
-// Text
-const text = await client.get("/file.txt").responseType("text").data();
+// Force specific response type using advanced API
+const text = await api.httpClient.get("/file.txt").responseType("text").data();
 
-// Blob
-const blob = await client.get("/image.jpg").responseType("blob").data();
+const blob = await api.httpClient.get("/image.jpg").responseType("blob").data();
 
-// ArrayBuffer
-const buffer = await client.get("/binary").responseType("arraybuffer").data();
+const buffer = await api.httpClient
+	.get("/binary")
+	.responseType("arraybuffer")
+	.data();
 
-// Stream
-const stream = await client.get("/large-file").responseType("stream").data();
+const stream = await api.httpClient
+	.get("/large-file")
+	.responseType("stream")
+	.data();
 ```
 
 ### Request Deduplication
@@ -300,19 +403,22 @@ Prevents multiple identical requests from being sent simultaneously:
 
 ```typescript
 // Enable globally
-const client = new HttpClient({
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	dedupe: true,
+	dedupe: true
+});
 });
 
-// Enable for specific request
-const data = await client.get("/data").dedupe().data();
+// Control deduplication for specific requests using advanced API
+const data = await api.httpClient.get("/data").dedupe(true).data();
 
-// These will return the same promise
-const p1 = client.get("/users").dedupe().data();
-const p2 = client.get("/users").dedupe().data();
-console.log(p1 === p2); // true
+// These will return the same promise when dedupe is enabled
+const p1 = api.get("/users");
+const p2 = api.get("/users");
+console.log(p1 === p2); // true if dedupe is enabled
 ```
+
+````
 
 ## Storage
 
@@ -329,7 +435,7 @@ const storage = new LocalStoragePersist();
 await storage.set("key", { data: "value" });
 const value = await storage.get("key");
 await storage.delete("key");
-```
+````
 
 ### MemoryStoragePersist
 
@@ -365,11 +471,11 @@ class CustomStorage implements PersistStorage {
 
 ## Error Handling
 
-The library throws `HttpError` for failed requests:
+The library throws detailed errors for failed requests:
 
 ```typescript
 try {
-	const data = await client.get("/users/999").data();
+	const data = await api.get("/users/999");
 } catch (error) {
 	if (error.response) {
 		// Server responded with error status
@@ -387,7 +493,7 @@ try {
 
 ## TypeScript Support
 
-The library is written in TypeScript and provides excellent type inference:
+The library provides excellent TypeScript support with type inference:
 
 ```typescript
 interface User {
@@ -396,19 +502,23 @@ interface User {
 	email: string;
 }
 
-// Response is typed as User
-const user = await client.get<User>("/users/1").data();
+// Response is automatically typed as User
+const user = await api.get<User>("/users/1");
 
-// Request body is typed
+// Request body is type-checked
 interface CreateUserDto {
 	name: string;
 	email: string;
 }
 
-const newUser = await client
-	.post<User, CreateUserDto>("/users")
-	.json({ name: "John", email: "john@example.com" }) // Type-checked
-	.data();
+const newUser = await api.post<User>("/users", {
+	name: "John", // ✅ Type-checked
+	email: "john@example.com", // ✅ Type-checked
+	// invalid: "field" // ❌ Would cause TypeScript error
+});
+
+// Advanced API also supports generics
+const user = await api.httpClient.get<User>("/users/1").data();
 ```
 
 ## Advanced Usage
@@ -416,36 +526,38 @@ const newUser = await client
 ### Creating a Custom API Client
 
 ```typescript
+import { createClient, ApiKeyStrategy } from "@cordy/endpoint-builder";
+
 class MyApiClient {
-	private client: HttpClient;
+	private api;
 
 	constructor(private apiKey: string) {
-		this.client = new HttpClient({
+		this.api = createClient({
 			baseUrl: "https://api.myservice.com",
-			auth: new ApiKeyStrategy("X-API-Key", apiKey),
-			defaultHeaders: {
-				Accept: "application/json",
+			authStrategy: new ApiKeyStrategy("X-API-Key", apiKey),
+			headers: {
+				Accept: "application/json"
+			}
 			},
 		});
 	}
 
 	async getUsers(page = 1): Promise<User[]> {
-		return this.client
-			.get<User[]>("/users")
-			.query({ page, limit: 20 })
-			.data();
+		return this.api.get<User[]>("/users", {
+			query: { page, limit: 20 }
+		});
 	}
 
 	async createUser(data: CreateUserDto): Promise<User> {
-		return this.client.post<User>("/users").json(data).data();
+		return this.api.post<User>("/users", data);
 	}
 
 	async updateUser(id: number, data: Partial<User>): Promise<User> {
-		return this.client.patch<User>(`/users/${id}`).json(data).data();
+		return this.api.patch<User>(`/users/${id}`, data);
 	}
 
 	async deleteUser(id: number): Promise<void> {
-		await this.client.delete(`/users/${id}`).send();
+		await this.api.delete(`/users/${id}`);
 	}
 }
 ```
@@ -454,10 +566,10 @@ class MyApiClient {
 
 ```typescript
 import { useEffect, useState } from "react";
-import { HttpClient } from "@cordy/endpoint-builder";
+import { createClient } from "@cordy/endpoint-builder";
 
-const client = new HttpClient({
-  baseUrl: "https://api.example.com"
+const api = createClient({
+	baseUrl: "https://api.example.com"
 });
 
 function useApi<T>(path: string) {
@@ -468,10 +580,9 @@ function useApi<T>(path: string) {
   useEffect(() => {
     const controller = new AbortController();
 
-    client
-      .get<T>(path)
-      .signal(controller.signal)
-      .data()
+    api.get<T>(path, {
+      signal: controller.signal
+    })
       .then(setData)
       .catch(setError)
       .finally(() => setLoading(false));
@@ -490,6 +601,172 @@ function UserProfile({ userId }: { userId: number }) {
   if (error) return <div>Error: {error.message}</div>;
 
   return <div>{user?.name}</div>;
+}
+```
+
+### Using with TanStack Query
+
+Perfect integration with TanStack Query for powerful data fetching:
+
+```typescript
+import { createClient } from "@cordy/endpoint-builder";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  auth: "your-token"
+});
+
+// Query functions
+const userQueries = {
+  all: () => ['users'] as const,
+  lists: () => [...userQueries.all(), 'list'] as const,
+  list: (filters: string) => [...userQueries.lists(), { filters }] as const,
+  details: () => [...userQueries.all(), 'detail'] as const,
+  detail: (id: number) => [...userQueries.details(), id] as const,
+};
+
+// Fetch user list
+function useUsers() {
+  return useQuery({
+    queryKey: userQueries.lists(),
+    queryFn: () => api.get<User[]>("/users")
+  });
+}
+
+// Fetch single user
+function useUser(id: number) {
+  return useQuery({
+    queryKey: userQueries.detail(id),
+    queryFn: () => api.get<User>(`/users/${id}`),
+    enabled: !!id
+  });
+}
+
+// Create user mutation
+function useCreateUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateUserDto) => api.post<User>("/users", data),
+    onSuccess: () => {
+      // Invalidate and refetch users list
+      queryClient.invalidateQueries({ queryKey: userQueries.lists() });
+    }
+  });
+}
+
+// Update user mutation
+function useUpdateUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<User> }) =>
+      api.patch<User>(`/users/${id}`, data),
+    onSuccess: (_, { id }) => {
+      // Invalidate specific user and users list
+      queryClient.invalidateQueries({ queryKey: userQueries.detail(id) });
+      queryClient.invalidateQueries({ queryKey: userQueries.lists() });
+    }
+  });
+}
+
+// Delete user mutation
+function useDeleteUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: number) => api.delete(`/users/${id}`),
+    onSuccess: () => {
+      // Invalidate users list after deletion
+      queryClient.invalidateQueries({ queryKey: userQueries.lists() });
+    }
+  });
+}
+
+// Usage in component
+function UserList() {
+  const { data: users, isLoading, error } = useUsers();
+  const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+  const deleteUser = useDeleteUser();
+
+  const handleCreate = () => {
+    createUser.mutate({
+      name: "New User",
+      email: "user@example.com"
+    });
+  };
+
+  const handleUpdate = (id: number) => {
+    updateUser.mutate({
+      id,
+      data: { name: "Updated Name" }
+    });
+  };
+
+  const handleDelete = (id: number) => {
+    deleteUser.mutate(id);
+  };
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <button onClick={handleCreate}>Create User</button>
+      {users?.map(user => (
+        <div key={user.id}>
+          {user.name}
+          <button onClick={() => handleUpdate(user.id)}>Update</button>
+          <button onClick={() => handleDelete(user.id)}>Delete</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Advanced: Error handling and optimistic updates
+function useCreateUserOptimistic() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateUserDto) => api.post<User>("/users", data),
+    onMutate: async (newUser) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: userQueries.lists() });
+
+      // Snapshot previous value
+      const previousUsers = queryClient.getQueryData(userQueries.lists());
+
+      // Optimistically update
+      queryClient.setQueryData(userQueries.lists(), (old: User[] = []) => [
+        ...old,
+        { id: Date.now(), ...newUser } // Temporary ID
+      ]);
+
+      return { previousUsers };
+    },
+    onError: (err, newUser, context) => {
+      // Rollback on error
+      queryClient.setQueryData(userQueries.lists(), context?.previousUsers);
+    },
+    onSettled: () => {
+      // Always refetch to ensure server state
+      queryClient.invalidateQueries({ queryKey: userQueries.lists() });
+    }
+  });
+}
+
+// Background refetching for fresh data
+function useUsersWithBackground() {
+  return useQuery({
+    queryKey: userQueries.lists(),
+    queryFn: () => api.get<User[]>("/users"),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: 30 * 1000, // Refetch every 30 seconds
+    refetchOnWindowFocus: true,
+  });
 }
 ```
 

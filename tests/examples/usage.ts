@@ -6,7 +6,7 @@
 import { ApiKeyStrategy } from "../../src/auth/ApiKeyStrategy";
 import { OpaqueTokenStrategy } from "../../src/auth/OpaqueTokenStrategy";
 import { HttpClient } from "../../src/core/HttpClient";
-import { JitteredExponentialBackoffRetryStrategy } from "../../src/retry/JitteredExponentialBackoffRetryStrategy";
+import { ExponentialRetryStrategy } from "../../src/retry/ExponentialRetryStrategy";
 import { LocalStoragePersist } from "../../src/storage/LocalStoragePersist";
 import { MemoryStoragePersist } from "../../src/storage/MemoryStoragePersist";
 
@@ -133,7 +133,7 @@ export async function errorHandling() {
  */
 export async function retryStrategy() {
 	// Создаем стратегию повторных попыток
-	const retry = new JitteredExponentialBackoffRetryStrategy(
+	const retry = new ExponentialRetryStrategy(
 		3,      // максимум 3 попытки
 		500,    // базовая задержка 500 мс
 		10000   // максимальная задержка 10 секунд
@@ -185,7 +185,7 @@ export async function completeExample() {
 	);
 
 	// Настраиваем стратегию повторных попыток
-	const retry = new JitteredExponentialBackoffRetryStrategy(3);
+	const retry = new ExponentialRetryStrategy(3);
 
 	// Создаем HTTP клиент со всеми настройками
 	const client = new HttpClient({
