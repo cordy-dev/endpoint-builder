@@ -1,6 +1,6 @@
 {
 	"name": "@cordy/endpoint-builder",
-	"version": "1.4.1",
+	"version": "1.5.0",
 	"description": "A flexible TypeScript library for building REST API endpoints with full type safety",
 	"type": "module",
 	"license": "MIT",
