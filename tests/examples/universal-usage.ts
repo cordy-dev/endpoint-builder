@@ -39,6 +39,7 @@ async function simpleAuth() {
 	});
 
 	// Bearer токен (автоматически добавит Bearer)
+	// @ts-expect-error - используется только для демонстрации
 	const _api2 = createClient({
 		baseUrl: "https://api.example.com",
 		auth: "your-token-123"

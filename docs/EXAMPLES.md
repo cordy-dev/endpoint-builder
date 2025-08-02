@@ -20,19 +20,19 @@ This guide shows practical examples of using the endpoint-builder library in var
 ### Simple GET Request
 
 ```typescript
-import { HttpClient } from "@cordy/endpoint-builder";
+import { createClient } from "@cordy/endpoint-builder";
 
-const client = new HttpClient({
+const api = createClient({
 	baseUrl: "https://jsonplaceholder.typicode.com",
 });
 
 // Get a single post
-const post = await client.get("/posts/1").data();
+const post = await api.get("/posts/1");
 console.log(post);
 // { userId: 1, id: 1, title: "...", body: "..." }
 
 // Get all posts with full response info
-const response = await client.get("/posts").send();
+const response = await api.response("GET", "/posts");
 console.log(response.status); // 200
 console.log(response.headers); // { "content-type": "application/json; charset=utf-8", ... }
 console.log(response.data); // Array of posts
@@ -47,8 +47,7 @@ const newPost = {
 	userId: 1,
 };
 
-const created = await client.post("/posts").json(newPost).data();
-
+const created = await api.post("/posts", newPost);
 console.log(created); // { id: 101, ...newPost }
 ```
 
@@ -56,27 +55,24 @@ console.log(created); // { id: 101, ...newPost }
 
 ```typescript
 // Full update with PUT
-const updatedPost = await client
-	.put("/posts/1")
-	.json({
-		id: 1,
-		title: "Updated Title",
-		body: "Updated content",
-		userId: 1,
-	})
-	.data();
+const updatedPost = await api.put("/posts/1", {
+	id: 1,
+	title: "Updated Title",
+	body: "Updated content",
+	userId: 1,
+});
 
 // Partial update with PATCH
-const patchedPost = await client
-	.patch("/posts/1")
-	.json({ title: "Only Update Title" })
-	.data();
+const patchedPost = await api.patch("/posts/1", { title: "Only Update Title" });
 ```
 
 ### DELETE Request
 
 ```typescript
-const deleteResponse = await client.delete("/posts/1").send();
+await api.delete("/posts/1");
+
+// Get full response for DELETE
+const deleteResponse = await api.response("DELETE", "/posts/1");
 console.log(deleteResponse.status); // 200
 ```
 
@@ -85,27 +81,34 @@ console.log(deleteResponse.status); // 200
 ### Query Parameters
 
 ```typescript
-const client = new HttpClient({
+const api = createClient({
 	baseUrl: "https://api.example.com",
 });
 
-// Using query method
-const users = await client
-	.get("/users")
-	.query({
+// Using query option
+const users = await api.get("/users", {
+	query: {
 		page: 2,
 		limit: 20,
 		sort: "name",
 		order: "asc",
-	})
-	.data();
+	},
+});
 
 // Query parameters are automatically URL encoded
-const searchResults = await client
-	.get("/search")
-	.query({
+const searchResults = await api.get("/search", {
+	query: {
 		q: "hello world", // Becomes q=hello%20world
 		tags: ["javascript", "typescript"], // Becomes tags=javascript&tags=typescript
+	},
+});
+
+// Using advanced API for complex queries
+const advancedResults = await api
+	.request("GET", "/search")
+	.query({
+		q: "hello world",
+		filters: { category: "tech", active: true },
 	})
 	.data();
 ```
@@ -114,15 +117,16 @@ const searchResults = await client
 
 ```typescript
 // Set headers for a single request
-const response = await client
-	.get("/protected-resource")
-	.header("X-Custom-Header", "custom-value")
-	.header("X-Request-ID", "123456")
-	.data();
+const response = await api.get("/protected-resource", {
+	headers: {
+		"X-Custom-Header": "custom-value",
+		"X-Request-ID": "123456",
+	},
+});
 
-// Set multiple headers at once
-const data = await client
-	.post("/api/data")
+// Set multiple headers using advanced API
+const data = await api
+	.request("POST", "/api/data")
 	.headers({
 		"X-API-Version": "2.0",
 		"X-Client-ID": "my-app",
@@ -132,9 +136,9 @@ const data = await client
 	.data();
 
 // Default headers for all requests
-const apiClient = new HttpClient({
+const apiClient = createClient({
 	baseUrl: "https://api.example.com",
-	defaultHeaders: {
+	headers: {
 		"X-API-Version": "2.0",
 		Accept: "application/json",
 	},
@@ -146,24 +150,30 @@ const apiClient = new HttpClient({
 ### API Key Authentication
 
 ```typescript
-import { HttpClient, ApiKeyStrategy } from "@cordy/endpoint-builder";
+import { createClient, ApiKeyStrategy } from "@cordy/endpoint-builder";
 
-// API key in header
-const client = new HttpClient({
+// Simple API key using createClient
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new ApiKeyStrategy("X-API-Key", "your-api-key-here"),
+	apiKey: "your-api-key-here", // Automatically uses X-API-Key header
+});
+
+// Custom API key header
+const customApi = createClient({
+	baseUrl: "https://api.example.com",
+	authStrategy: new ApiKeyStrategy("X-Custom-Key", "your-api-key-here"),
 });
 
 // API key as query parameter
-const clientWithQueryAuth = new HttpClient({
+const queryApi = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new ApiKeyStrategy("api_key", "your-api-key-here", true),
+	authStrategy: new ApiKeyStrategy("api_key", "your-api-key-here", true),
 });
 
 // Bearer token
-const bearerClient = new HttpClient({
+const bearerApi = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new ApiKeyStrategy("Authorization", "Bearer your-token-here"),
+	auth: "your-token-here", // Automatically becomes "Bearer your-token-here"
 });
 ```
 
@@ -171,15 +181,15 @@ const bearerClient = new HttpClient({
 
 ```typescript
 import {
-	HttpClient,
+	createClient,
 	OpaqueTokenStrategy,
 	LocalStoragePersist,
 } from "@cordy/endpoint-builder";
 
 // Setup client with token refresh
-const client = new HttpClient({
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new OpaqueTokenStrategy(
+	authStrategy: new OpaqueTokenStrategy(
 		new LocalStoragePersist(),
 		"https://api.example.com/auth/refresh",
 	),
@@ -204,16 +214,20 @@ await storage.set("tokens", tokens);
 // 2. Refresh tokens when receiving 401/403 responses
 // 3. Retry the failed request with new token
 
-const protectedData = await client.get("/protected").data();
+const protectedData = await api.get("/protected");
 ```
 
 ### Custom Authentication Strategy
 
 ```typescript
-import { AuthStrategy, HttpHeaders } from "@cordy/endpoint-builder";
+import {
+	createClient,
+	AuthStrategy,
+	HttpHeaders,
+} from "@cordy/endpoint-builder";
 
 class CustomAuthStrategy implements AuthStrategy {
-	async enrich(req: Request): Promise<Partial<HttpHeaders>> {
+	async enrichRequest(req: Request): Promise<Partial<HttpHeaders>> {
 		// Add custom authentication headers
 		const timestamp = Date.now().toString();
 		const signature = await this.generateSignature(req, timestamp);
@@ -224,7 +238,7 @@ class CustomAuthStrategy implements AuthStrategy {
 		};
 	}
 
-	async refresh(req: Request, res: Response): Promise<boolean> {
+	async handleRequestError?(req: Request, res: Response): Promise<boolean> {
 		// Custom refresh logic if needed
 		return false;
 	}
@@ -238,9 +252,9 @@ class CustomAuthStrategy implements AuthStrategy {
 	}
 }
 
-const client = new HttpClient({
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new CustomAuthStrategy(),
+	authStrategy: new CustomAuthStrategy(),
 });
 ```
 
@@ -248,17 +262,17 @@ const client = new HttpClient({
 
 ```typescript
 // Client with default authentication
-const client = new HttpClient({
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	auth: new ApiKeyStrategy("X-API-Key", "secret-key"),
+	apiKey: "secret-key",
 });
 
 // This request will include the API key
-const protectedData = await client.get("/protected").data();
+const protectedData = await api.get("/protected");
 
 // This request will NOT include the API key
-const publicData = await client
-	.get("/public")
+const publicData = await api
+	.request("GET", "/public")
 	.auth(null) // Disable auth for this request
 	.data();
 ```
@@ -268,38 +282,41 @@ const publicData = await client
 ### Uploading Files
 
 ```typescript
-// Single file upload
+// Using the upload method
 const fileInput = document.querySelector<HTMLInputElement>("#file-input");
 const file = fileInput?.files?.[0];
 
 if (file) {
-	const formData = new FormData();
-	formData.append("file", file);
-	formData.append("description", "My file upload");
-
-	const response = await client.post("/upload").body(formData).data();
+	const response = await api.upload("/upload", {
+		file: file,
+		description: "My file upload",
+	});
 }
 
-// Multiple files with additional data
+// Advanced file upload using RequestBuilder
 const formData = new FormData();
-formData.append("files", file1);
-formData.append("files", file2);
-formData.append(
-	"metadata",
-	JSON.stringify({ tags: ["important", "document"] }),
-);
+formData.append("file", file);
+formData.append("description", "My file upload");
 
-const result = await client.post("/upload/multiple").body(formData).data();
+const result = await api
+	.request("POST", "/upload")
+	.body(formData)
+	.timeout(30000)
+	.data();
+
+// Multiple files with additional data
+const multipleFiles = await api.upload("/upload/multiple", {
+	file1: file1,
+	file2: file2,
+	metadata: JSON.stringify({ tags: ["important", "document"] }),
+});
 ```
 
 ### Downloading Files
 
 ```typescript
-// Download as blob
-const fileBlob = await client
-	.get("/files/document.pdf")
-	.responseType("blob")
-	.data();
+// Download as blob using download method
+const fileBlob = await api.download("/files/document.pdf");
 
 // Create download link
 const url = URL.createObjectURL(fileBlob);
@@ -309,8 +326,8 @@ a.download = "document.pdf";
 a.click();
 URL.revokeObjectURL(url);
 
-// Download as ArrayBuffer for processing
-const buffer = await client
+// Download as ArrayBuffer for processing using advanced API
+const buffer = await api.httpClient
 	.get("/files/data.bin")
 	.responseType("arraybuffer")
 	.data();
@@ -322,8 +339,8 @@ console.log("First byte:", view.getUint8(0));
 ### Streaming Large Files
 
 ```typescript
-// Get response as stream
-const response = await client
+// Get response as stream using advanced API
+const response = await api.httpClient
 	.get("/large-file.zip")
 	.responseType("stream")
 	.send();
@@ -348,7 +365,7 @@ while (true) {
 
 ```typescript
 try {
-	const data = await client.get("/may-fail").data();
+	const data = await api.get("/may-fail");
 	console.log(data);
 } catch (error) {
 	if (error.response) {
@@ -369,7 +386,7 @@ try {
 
 ```typescript
 try {
-	const user = await client.get("/users/123").data();
+	const user = await api.get("/users/123");
 } catch (error) {
 	switch (error.status) {
 		case 404:
@@ -394,14 +411,14 @@ try {
 
 ```typescript
 import {
-	HttpClient,
-	JitteredExponentialBackoffRetryStrategy,
+	createClient,
+	ExponentialRetryStrategy,
 } from "@cordy/endpoint-builder";
 
 // Global retry configuration
-const client = new HttpClient({
+const api = createClient({
 	baseUrl: "https://api.example.com",
-	retryStrategy: new JitteredExponentialBackoffRetryStrategy(
+	retryStrategy: new ExponentialRetryStrategy(
 		5, // max attempts
 		500, // base delay in ms
 		30000, // max delay in ms
@@ -409,20 +426,16 @@ const client = new HttpClient({
 });
 
 // Disable retry for specific request
-const criticalData = await client
-	.post("/critical-operation")
+const criticalData = await api
+	.request("POST", "/critical-operation")
 	.retry(null) // No retry for this request
 	.json({ important: "data" })
 	.data();
 
 // Custom retry strategy for specific request
-const customRetry = new JitteredExponentialBackoffRetryStrategy(
-	10,
-	1000,
-	60000,
-);
-const resilientData = await client
-	.get("/flaky-endpoint")
+const customRetry = new ExponentialRetryStrategy(10, 1000, 60000);
+const resilientData = await api
+	.request("GET", "/flaky-endpoint")
 	.retry(customRetry)
 	.data();
 ```
@@ -432,27 +445,33 @@ const resilientData = await client
 ### Timeout Control
 
 ```typescript
-// Set timeout for specific request (in milliseconds)
+// Set timeout for specific request using simple API
 try {
-	const data = await client
-		.get("/slow-endpoint")
-		.timeout(5000) // 5 second timeout
-		.data();
+	const data = await api.get("/slow-endpoint", { timeout: 5000 });
 } catch (error) {
-	if (error.code === "TIMEOUT") {
+	if (error.name === "AbortError") {
 		console.log("Request timed out");
 	}
 }
+
+// Using advanced API
+const data = await api
+	.request("GET", "/slow-endpoint")
+	.timeout(5000) // 5 second timeout
+	.data();
 ```
 
 ### Request Cancellation
 
 ```typescript
-// Using AbortController
+// Using AbortController with advanced API
 const controller = new AbortController();
 
 // Start request
-const promise = client.get("/long-running").signal(controller.signal).data();
+const promise = api
+	.request("GET", "/long-running")
+	.signal(controller.signal)
+	.data();
 
 // Cancel after 2 seconds
 setTimeout(() => controller.abort(), 2000);
@@ -466,40 +485,38 @@ try {
 }
 
 // Cancel multiple requests
-const controller = new AbortController();
+const controller2 = new AbortController();
 
 const requests = [
-	client.get("/data1").signal(controller.signal).data(),
-	client.get("/data2").signal(controller.signal).data(),
-	client.get("/data3").signal(controller.signal).data(),
+	api.httpClient.get("/data1").signal(controller2.signal).data(),
+	api.httpClient.get("/data2").signal(controller2.signal).data(),
+	api.httpClient.get("/data3").signal(controller2.signal).data(),
 ];
 
 // Cancel all requests
-controller.abort();
+controller2.abort();
 ```
 
 ### Request Deduplication
 
 ```typescript
 // Enable deduplication globally
-const client = new HttpClient({
+const api = createClient({
 	baseUrl: "https://api.example.com",
 	dedupe: true,
 });
 
 // These identical concurrent requests will return the same promise
 const [user1, user2, user3] = await Promise.all([
-	client.get("/users/123").data(),
-	client.get("/users/123").data(),
-	client.get("/users/123").data(),
+	api.get("/users/123"),
+	api.get("/users/123"),
+	api.get("/users/123"),
 ]);
 // Only one actual HTTP request is made
 
-// Enable deduplication for specific requests
-const dedupeClient = new HttpClient({ baseUrl: "https://api.example.com" });
-
-const promise1 = dedupeClient.get("/data").dedupe().data();
-const promise2 = dedupeClient.get("/data").dedupe().data();
+// Enable deduplication for specific requests using advanced API
+const promise1 = api.httpClient.get("/data").dedupe().data();
+const promise2 = api.httpClient.get("/data").dedupe().data();
 // promise1 === promise2 (same promise instance)
 ```
 
@@ -507,22 +524,31 @@ const promise2 = dedupeClient.get("/data").dedupe().data();
 
 ```typescript
 // JSON (default)
-const jsonData = await client.get("/api/data").data();
+const jsonData = await api.get("/api/data");
 
-// Plain text
-const textContent = await client.get("/readme.txt").responseType("text").data();
+// Plain text using advanced API
+const textContent = await api.httpClient
+	.get("/readme.txt")
+	.responseType("text")
+	.data();
 
 // Blob for binary data
-const imageBlob = await client.get("/image.png").responseType("blob").data();
+const imageBlob = await api.httpClient
+	.get("/image.png")
+	.responseType("blob")
+	.data();
 
 // ArrayBuffer for binary processing
-const binaryData = await client
+const binaryData = await api.httpClient
 	.get("/data.bin")
 	.responseType("arraybuffer")
 	.data();
 
 // Stream for large data
-const stream = await client.get("/large-file").responseType("stream").data();
+const stream = await api.httpClient
+	.get("/large-file")
+	.responseType("stream")
+	.data();
 ```
 
 ## Parallel Requests
@@ -531,16 +557,16 @@ const stream = await client.get("/large-file").responseType("stream").data();
 
 ```typescript
 const [users, posts, comments] = await Promise.all([
-	client.get("/users").data(),
-	client.get("/posts").data(),
-	client.get("/comments").data(),
+	api.get("/users"),
+	api.get("/posts"),
+	api.get("/comments"),
 ]);
 
 // With error handling for individual requests
 const results = await Promise.allSettled([
-	client.get("/users").data(),
-	client.get("/posts").data(),
-	client.get("/may-fail").data(),
+	api.get("/users"),
+	api.get("/posts"),
+	api.get("/may-fail"),
 ]);
 
 results.forEach((result, index) => {
@@ -556,31 +582,26 @@ results.forEach((result, index) => {
 
 ```typescript
 // Get user, then their posts
-const user = await client.get("/users/1").data();
-const posts = await client.get(`/users/${user.id}/posts`).data();
+const user = await api.get("/users/1");
+const posts = await api.get(`/users/${user.id}/posts`);
 
 // Chain multiple dependent requests
-const orderData = await client
-	.post("/orders")
-	.json({ items: ["item1", "item2"] })
-	.data();
+const orderData = await api.post("/orders", { items: ["item1", "item2"] });
 
-const paymentResult = await client
-	.post(`/orders/${orderData.id}/payment`)
-	.json({ method: "credit_card", amount: orderData.total })
-	.data();
+const paymentResult = await api.post(`/orders/${orderData.id}/payment`, {
+	method: "credit_card",
+	amount: orderData.total,
+});
 
-const confirmation = await client
-	.get(`/orders/${orderData.id}/confirmation`)
-	.data();
+const confirmation = await api.get(`/orders/${orderData.id}/confirmation`);
 ```
 
 ## Working with GraphQL
 
 ```typescript
-const graphqlClient = new HttpClient({
+const graphqlApi = createClient({
 	baseUrl: "https://api.example.com/graphql",
-	defaultHeaders: {
+	headers: {
 		"Content-Type": "application/json",
 	},
 });
@@ -600,13 +621,10 @@ const query = `
   }
 `;
 
-const userData = await graphqlClient
-	.post("")
-	.json({
-		query,
-		variables: { id: "123" },
-	})
-	.data();
+const userData = await graphqlApi.post("", {
+	query,
+	variables: { id: "123" },
+});
 
 // GraphQL mutation
 const mutation = `
@@ -619,18 +637,15 @@ const mutation = `
   }
 `;
 
-const newPost = await graphqlClient
-	.post("")
-	.json({
-		query: mutation,
-		variables: {
-			input: {
-				title: "New Post",
-				content: "Post content",
-			},
+const newPost = await graphqlApi.post("", {
+	query: mutation,
+	variables: {
+		input: {
+			title: "New Post",
+			content: "Post content",
 		},
-	})
-	.data();
+	},
+});
 ```
 
 ## TypeScript Integration
@@ -660,36 +675,35 @@ interface CreatePostDto {
 
 // Type-safe API client
 class BlogApiClient {
-	private client: HttpClient;
+	private api;
 
 	constructor(baseUrl: string) {
-		this.client = new HttpClient({ baseUrl });
+		this.api = createClient({ baseUrl });
 	}
 
 	async getUser(id: number): Promise<User> {
-		return this.client.get<User>(`/users/${id}`).data();
+		return this.api.get<User>(`/users/${id}`);
 	}
 
 	async getPosts(userId?: number): Promise<Post[]> {
-		return this.client
-			.get<Post[]>("/posts")
-			.query(userId ? { userId } : {})
-			.data();
+		return this.api.get<Post[]>("/posts", {
+			query: userId ? { userId } : {},
+		});
 	}
 
 	async createPost(post: CreatePostDto): Promise<Post> {
-		return this.client.post<Post>("/posts").json(post).data();
+		return this.api.post<Post>("/posts", post);
 	}
 
 	async updatePost(id: number, updates: Partial<Post>): Promise<Post> {
-		return this.client.patch<Post>(`/posts/${id}`).json(updates).data();
+		return this.api.patch<Post>(`/posts/${id}`, updates);
 	}
 }
 
 // Usage
-const api = new BlogApiClient("https://jsonplaceholder.typicode.com");
-const user = await api.getUser(1); // Type: User
-const posts = await api.getPosts(user.id); // Type: Post[]
+const blogApi = new BlogApiClient("https://jsonplaceholder.typicode.com");
+const user = await blogApi.getUser(1); // Type: User
+const posts = await blogApi.getPosts(user.id); // Type: Post[]
 ```
 
 ### Generic API Wrapper
@@ -698,45 +712,39 @@ const posts = await api.getPosts(user.id); // Type: Post[]
 // Generic CRUD operations
 class ApiResource<T, CreateDto = Partial<T>, UpdateDto = Partial<T>> {
 	constructor(
-		private client: HttpClient,
+		private api: ReturnType<typeof createClient>,
 		private resource: string,
 	) {}
 
 	async findAll(query?: Record<string, any>): Promise<T[]> {
-		return this.client
-			.get<T[]>(`/${this.resource}`)
-			.query(query || {})
-			.data();
+		return this.api.get<T[]>(`/${this.resource}`, { query: query || {} });
 	}
 
 	async findOne(id: string | number): Promise<T> {
-		return this.client.get<T>(`/${this.resource}/${id}`).data();
+		return this.api.get<T>(`/${this.resource}/${id}`);
 	}
 
 	async create(data: CreateDto): Promise<T> {
-		return this.client.post<T>(`/${this.resource}`).json(data).data();
+		return this.api.post<T>(`/${this.resource}`, data);
 	}
 
 	async update(id: string | number, data: UpdateDto): Promise<T> {
-		return this.client.put<T>(`/${this.resource}/${id}`).json(data).data();
+		return this.api.put<T>(`/${this.resource}/${id}`, data);
 	}
 
 	async patch(id: string | number, data: UpdateDto): Promise<T> {
-		return this.client
-			.patch<T>(`/${this.resource}/${id}`)
-			.json(data)
-			.data();
+		return this.api.patch<T>(`/${this.resource}/${id}`, data);
 	}
 
 	async delete(id: string | number): Promise<void> {
-		await this.client.delete(`/${this.resource}/${id}`).send();
+		await this.api.delete(`/${this.resource}/${id}`);
 	}
 }
 
 // Usage
-const client = new HttpClient({ baseUrl: "https://api.example.com" });
-const usersApi = new ApiResource<User>(client, "users");
-const postsApi = new ApiResource<Post, CreatePostDto>(client, "posts");
+const api = createClient({ baseUrl: "https://api.example.com" });
+const usersApi = new ApiResource<User>(api, "users");
+const postsApi = new ApiResource<Post, CreatePostDto>(api, "posts");
 
 const users = await usersApi.findAll({ active: true });
 const newUser = await usersApi.create({
@@ -752,50 +760,43 @@ const newUser = await usersApi.create({
 ```typescript
 // Create a wrapper that processes all responses
 class ApiClientWithInterceptor {
-	private client: HttpClient;
+	private api;
 
-	constructor(config: HttpClientOptions) {
-		this.client = new HttpClient(config);
+	constructor(config: Parameters<typeof createClient>[0]) {
+		this.api = createClient(config);
 	}
 
-	private async intercept<T>(promise: Promise<HttpResponse<T>>): Promise<T> {
+	private async intercept<T>(promise: Promise<T>): Promise<T> {
 		try {
-			const response = await promise;
+			const data = await promise;
 
 			// Log all responses
-			console.log(
-				`${response.config.method} ${response.config.url} - ${response.status}`,
-			);
+			console.log(`Request completed successfully`);
 
-			// Check for custom headers
-			if (response.headers["x-deprecated"]) {
-				console.warn(`Warning: ${response.config.url} is deprecated`);
-			}
-
-			// Extract data with custom logic
+			// Custom data processing
 			if (
-				response.data &&
-				typeof response.data === "object" &&
-				"data" in response.data
+				data &&
+				typeof data === "object" &&
+				"data" in data &&
+				"status" in data
 			) {
-				return response.data.data as T;
+				return (data as any).data as T;
 			}
 
-			return response.data;
+			return data;
 		} catch (error) {
 			// Global error handling
-			console.error(
-				`Request failed: ${error.config?.method} ${error.config?.url}`,
-			);
+			console.error(`Request failed:`, error.message);
 			throw error;
 		}
 	}
 
-	get<T>(url: string) {
-		return {
-			...this.client.get<T>(url),
-			data: () => this.intercept(this.client.get<T>(url).send()),
-		};
+	async get<T>(url: string, options?: any): Promise<T> {
+		return this.intercept(this.api.get<T>(url, options));
+	}
+
+	async post<T>(url: string, data?: any, options?: any): Promise<T> {
+		return this.intercept(this.api.post<T>(url, data, options));
 	}
 }
 ```
@@ -804,11 +805,11 @@ class ApiClientWithInterceptor {
 
 ```typescript
 class BatchRequestClient {
-	private client: HttpClient;
+	private api;
 	private queue: Array<() => Promise<any>> = [];
 
-	constructor(config: HttpClientOptions) {
-		this.client = new HttpClient(config);
+	constructor(config: Parameters<typeof createClient>[0]) {
+		this.api = createClient(config);
 	}
 
 	add<T>(request: () => Promise<T>): this {
@@ -827,9 +828,9 @@ class BatchRequestClient {
 const batch = new BatchRequestClient({ baseUrl: "https://api.example.com" });
 
 const [users, posts, comments] = await batch
-	.add(() => client.get("/users").data())
-	.add(() => client.get("/posts").data())
-	.add(() => client.get("/comments").data())
+	.add(() => batch.api.get("/users"))
+	.add(() => batch.api.get("/posts"))
+	.add(() => batch.api.get("/comments"))
 	.execute<[User[], Post[], Comment[]]>();
 ```
 
@@ -837,12 +838,12 @@ const [users, posts, comments] = await batch
 
 ```typescript
 class CachedHttpClient {
-	private client: HttpClient;
+	private api;
 	private cache = new Map<string, { data: any; timestamp: number }>();
 	private ttl: number;
 
-	constructor(config: HttpClientOptions, ttlSeconds = 300) {
-		this.client = new HttpClient(config);
+	constructor(config: Parameters<typeof createClient>[0], ttlSeconds = 300) {
+		this.api = createClient(config);
 		this.ttl = ttlSeconds * 1000;
 	}
 
@@ -858,7 +859,7 @@ class CachedHttpClient {
 		}
 
 		console.log(`Cache miss: ${url}`);
-		const data = await this.client.get<T>(url).data();
+		const data = await this.api.get<T>(url);
 
 		this.cache.set(cacheKey, {
 			data,
@@ -878,19 +879,19 @@ class CachedHttpClient {
 }
 
 // Usage
-const cachedClient = new CachedHttpClient(
+const cachedApi = new CachedHttpClient(
 	{ baseUrl: "https://api.example.com" },
 	600, // 10 minutes TTL
 );
 
 // First call - fetches from API
-const users1 = await cachedClient.get<User[]>("/users");
+const users1 = await cachedApi.get<User[]>("/users");
 
 // Second call within TTL - returns from cache
-const users2 = await cachedClient.get<User[]>("/users");
+const users2 = await cachedApi.get<User[]>("/users");
 
 // Force fresh data
-const users3 = await cachedClient.get<User[]>("/users", { bypassCache: true });
+const users3 = await cachedApi.get<User[]>("/users", { bypassCache: true });
 ```
 
 ### API Client Factory
@@ -901,41 +902,41 @@ class ApiClientFactory {
 	static create(
 		service: "users" | "posts" | "auth",
 		token?: string,
-	): HttpClient {
+	): ReturnType<typeof createClient> {
 		const configs = {
 			users: {
 				baseUrl: "https://users-api.example.com",
-				defaultHeaders: { "X-Service": "users" },
+				headers: { "X-Service": "users" },
 			},
 			posts: {
 				baseUrl: "https://posts-api.example.com",
-				defaultHeaders: { "X-Service": "posts" },
+				headers: { "X-Service": "posts" },
 			},
 			auth: {
 				baseUrl: "https://auth-api.example.com",
-				defaultHeaders: { "X-Service": "auth" },
+				headers: { "X-Service": "auth" },
 			},
 		};
 
 		const config = configs[service];
 
 		if (token) {
-			return new HttpClient({
+			return createClient({
 				...config,
-				auth: new ApiKeyStrategy("Authorization", `Bearer ${token}`),
+				auth: token,
 			});
 		}
 
-		return new HttpClient(config);
+		return createClient(config);
 	}
 }
 
 // Usage
-const usersClient = ApiClientFactory.create("users", userToken);
-const authClient = ApiClientFactory.create("auth");
+const usersApi = ApiClientFactory.create("users", userToken);
+const authApi = ApiClientFactory.create("auth");
 
-const profile = await usersClient.get("/profile").data();
-const loginResult = await authClient.post("/login").json(credentials).data();
+const profile = await usersApi.get("/profile");
+const loginResult = await authApi.post("/login", credentials);
 ```
 
 ## Testing
@@ -943,20 +944,20 @@ const loginResult = await authClient.post("/login").json(credentials).data();
 ### Using with Testing Libraries
 
 ```typescript
-import { HttpClient } from "@cordy/endpoint-builder";
+import { createClient } from "@cordy/endpoint-builder";
 import { describe, it, expect, beforeEach } from "vitest";
 
 describe("User API", () => {
-	let client: HttpClient;
+	let api: ReturnType<typeof createClient>;
 
 	beforeEach(() => {
-		client = new HttpClient({
+		api = createClient({
 			baseUrl: "https://jsonplaceholder.typicode.com",
 		});
 	});
 
 	it("should fetch user by id", async () => {
-		const user = await client.get<User>("/users/1").data();
+		const user = await api.get<User>("/users/1");
 
 		expect(user).toBeDefined();
 		expect(user.id).toBe(1);
@@ -970,7 +971,7 @@ describe("User API", () => {
 			userId: 1,
 		};
 
-		const created = await client.post<Post>("/posts").json(newPost).data();
+		const created = await api.post<Post>("/posts", newPost);
 
 		expect(created.id).toBeDefined();
 		expect(created.title).toBe(newPost.title);
@@ -984,9 +985,10 @@ The endpoint-builder library provides a powerful and flexible API for making HTT
 
 Key takeaways:
 
-- Use type parameters for type-safe responses
+- Use the `createClient` function for both simple and advanced use cases
 - Leverage the fluent API for readable request configuration
 - Take advantage of built-in features like retry, deduplication, and authentication
-- Create abstractions on top of HttpClient for your specific use cases
+- Create abstractions on top of the client for your specific use cases
+- Use TypeScript generics for type-safe responses
 
 For more details, see the [API documentation](./API.md).

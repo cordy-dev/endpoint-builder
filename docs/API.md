@@ -4,6 +4,7 @@ Detailed description of all classes, methods, and options of the endpoint-builde
 
 ## Contents
 
+- [Universal API (createClient)](#universal-api-createclient)
 - [HttpClient](#httpclient)
 - [RequestBuilder](#requestbuilder)
 - [Authentication Strategies](#authentication-strategies)
@@ -12,9 +13,113 @@ Detailed description of all classes, methods, and options of the endpoint-builde
 - [Utilities](#utilities)
 - [Data Types](#data-types)
 
+## Universal API (createClient)
+
+The recommended way to use the library is through the universal `createClient` function that supports both simple and advanced use cases.
+
+### createClient
+
+```typescript
+function createClient(options?: UniversalClientOptions): UniversalClient;
+```
+
+Creates a universal HTTP client instance.
+
+#### Parameters:
+
+- `options`: Configuration object with the following properties:
+    - `baseUrl`: Base URL for all requests
+    - `auth`: Authorization header value (auto-detects Bearer token)
+    - `apiKey`: API key for X-API-Key header
+    - `authStrategy`: Custom authentication strategy
+    - `storage`: Storage for tokens/auth data
+    - `headers`: Default headers for all requests
+    - `timeout`: Request timeout in milliseconds (default: 30000)
+    - `retry`: Enable automatic retries (default: true)
+    - `retryStrategy`: Custom retry strategy
+    - `dedupe`: Enable request deduplication (default: true)
+    - `responseType`: Default response type
+
+### UniversalClient Methods
+
+#### Simple HTTP Methods
+
+```typescript
+get<T>(path: string, options?: {
+  query?: Record<string, any>;
+  headers?: HttpHeaders;
+  timeout?: number;
+}): Promise<T>
+
+post<T>(path: string, data?: any, options?: {
+  headers?: HttpHeaders;
+  timeout?: number;
+}): Promise<T>
+
+put<T>(path: string, data?: any, options?: {
+  headers?: HttpHeaders;
+  timeout?: number;
+}): Promise<T>
+
+patch<T>(path: string, data?: any, options?: {
+  headers?: HttpHeaders;
+  timeout?: number;
+}): Promise<T>
+
+delete<T>(path: string, options?: {
+  headers?: HttpHeaders;
+  timeout?: number;
+}): Promise<T>
+```
+
+#### Specialized Methods
+
+```typescript
+upload<T>(path: string, files: Record<string, File | string>, options?: {
+  headers?: HttpHeaders;
+  timeout?: number;
+}): Promise<T>
+```
+
+Uploads files using FormData.
+
+```typescript
+download(path: string, options?: {
+  headers?: HttpHeaders;
+  timeout?: number;
+}): Promise<Blob>
+```
+
+Downloads a file as Blob.
+
+```typescript
+response<T>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, options?: {
+  data?: any;
+  query?: Record<string, any>;
+  headers?: HttpHeaders;
+  timeout?: number;
+}): Promise<HttpResponse<T>>
+```
+
+Returns the full response instead of just data.
+
+#### Advanced Methods
+
+```typescript
+request<T>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string): RequestBuilder<T, any, any>
+```
+
+Returns a RequestBuilder for advanced request configuration.
+
+```typescript
+get httpClient(): HttpClient
+```
+
+Access the underlying HttpClient for full control.
+
 ## HttpClient
 
-The main class for executing HTTP requests. Provides methods for creating various types of requests.
+The main class for executing HTTP requests. Usually accessed through `createClient().httpClient`.
 
 ### Constructor
 
@@ -31,7 +136,7 @@ constructor(opts: HttpClientOptions = {})
     - `defaultHeaders`: Default headers for all requests
     - `dedupe`: Enable deduplication of identical requests (default: false)
     - `responseType`: Default response type
-    - `retryStrategy`: Retry strategy (defaults to JitteredExponentialBackoffRetryStrategy)
+    - `retryStrategy`: Retry strategy (defaults to ExponentialRetryStrategy)
 
 ### Methods
 
@@ -202,8 +307,8 @@ Executes the request and returns the full response object.
 
 ```typescript
 interface AuthStrategy {
-	enrich(req: Request): Promise<Partial<HttpHeaders>>;
-	refresh?(req: Request, res: Response): Promise<boolean>;
+	enrichRequest(req: Request): Promise<Partial<HttpHeaders>>;
+	handleRequestError?(req: Request, res: Response): Promise<boolean>;
 }
 ```
 
@@ -272,7 +377,7 @@ interface RetryStrategy {
 }
 ```
 
-### JitteredExponentialBackoffRetryStrategy
+### ExponentialRetryStrategy
 
 Retry strategy with exponential backoff and jitter.
 
@@ -378,6 +483,24 @@ Decodes the response based on:
     - Default → blob
 
 ## Data Types
+
+### UniversalClientOptions
+
+```typescript
+interface UniversalClientOptions {
+	baseUrl?: string;
+	auth?: string;
+	apiKey?: string;
+	authStrategy?: AuthStrategy;
+	storage?: PersistStorage;
+	headers?: HttpHeaders;
+	timeout?: number;
+	retry?: boolean;
+	retryStrategy?: RetryStrategy | null;
+	dedupe?: boolean;
+	responseType?: "json" | "text" | "blob" | "arraybuffer" | "stream";
+}
+```
 
 ### HttpClientOptions
 

@@ -57,7 +57,7 @@ const newUser = await api.post("/users", {
 import {
 	createClient,
 	ApiKeyStrategy,
-	JitteredExponentialBackoffRetryStrategy,
+	ExponentialRetryStrategy,
 } from "@cordy/endpoint-builder";
 
 const api = createClient({
@@ -70,7 +70,7 @@ const api = createClient({
 
 	// Advanced options
 	authStrategy: new ApiKeyStrategy("Custom-Header", "secret"),
-	retryStrategy: new JitteredExponentialBackoffRetryStrategy(5, 1000, 30000),
+	retryStrategy: new ExponentialRetryStrategy(5, 1000, 30000),
 	dedupe: true,
 });
 
@@ -87,8 +87,6 @@ const response = await api
 // Full HttpClient access when needed
 const fullControl = await api.httpClient.get("/complex").retry(null).data();
 ```
-
-**[📖 See full Quick Start Guide](./docs/QUICK_START.md)** for comprehensive examples.
 
 ## HTTP Methods
 
@@ -116,7 +114,7 @@ const updated = await api.put("/users/1", { name: "Jane Updated" });
 const patched = await api.patch("/users/1", { name: "Jane Patched" });
 
 // DELETE requests
-const deleted = await api.delete("/users/1");
+await api.delete("/users/1");
 
 // Get full response instead of just data
 const response = await api.response("GET", "/users/1");
@@ -127,15 +125,22 @@ console.log(response.data); // User object
 ### File Operations
 
 ```typescript
-// File upload (simple)
-const fileData = new FormData();
-fileData.append("file", fileInput.files[0]);
-const uploaded = await api.post("/upload", fileData);
+// File upload
+const uploaded = await api.upload("/upload", {
+	file: fileInput.files[0],
+	description: "My document",
+});
 
 // File download
-const fileBlob = await api.get("/files/document.pdf", {
-	headers: { Accept: "application/pdf" },
-});
+const fileBlob = await api.download("/files/document.pdf");
+
+// Create download link
+const url = URL.createObjectURL(fileBlob);
+const a = document.createElement("a");
+a.href = url;
+a.download = "document.pdf";
+a.click();
+URL.revokeObjectURL(url);
 ```
 
 ### Advanced Usage with RequestBuilder
@@ -148,10 +153,13 @@ const response = await api
 	.request("POST", "/users")
 	.timeout(5000)
 	.header("X-Custom", "value")
-	.body({ name: "John", email: "john@example.com" })
+	.json({ name: "John", email: "john@example.com" })
 	.send();
 
 // File upload with custom headers
+const formData = new FormData();
+formData.append("file", file);
+
 const uploaded = await api
 	.request("POST", "/upload")
 	.timeout(30000)
@@ -179,7 +187,7 @@ const user = await client
 // Complex authentication override
 const data = await client
 	.post("/secure")
-	.authStrategy(customAuthStrategy)
+	.auth(customAuthStrategy)
 	.json({ sensitive: "data" })
 	.data();
 ```
@@ -269,28 +277,14 @@ class HMACAuthStrategy implements AuthStrategy {
 		};
 	}
 
-	async handleRequestError(req: Request, res: Response): Promise<boolean> {
-		// Return true to retry the request
+	async handleRequestError?(req: Request, res: Response): Promise<boolean> {
+		// Return true to retry the request after handling the error
 		return false;
 	}
 
 	private async sign(req: Request, timestamp: string): Promise<string> {
 		// Your HMAC signing logic here
 		return "signature";
-	}
-
-	// ============================================
-	// DEPRECATED METHODS (for backward compatibility)
-	// ============================================
-
-	/** @deprecated Use enrichRequest() instead */
-	async enrich(req: Request): Promise<Partial<HttpHeaders>> {
-		return this.enrichRequest(req);
-	}
-
-	/** @deprecated Use handleRequestError() instead */
-	async refresh(req: Request, res: Response): Promise<boolean> {
-		return this.handleRequestError(req, res);
 	}
 }
 
@@ -308,27 +302,31 @@ Configure retry behavior for resilient applications:
 ```typescript
 import {
 	createClient,
-	JitteredExponentialBackoffRetryStrategy,
+	ExponentialRetryStrategy,
 } from "@cordy/endpoint-builder";
 
 // Simple retry configuration
 const api = createClient({
 	baseUrl: "https://api.example.com",
-	retry: 3, // Auto-creates retry strategy with 3 attempts
+	retry: true, // Uses default ExponentialRetryStrategy
 });
 
 // Advanced retry strategy
 const api = createClient({
 	baseUrl: "https://api.example.com",
-	retryStrategy: new JitteredExponentialBackoffRetryStrategy(
+	retryStrategy: new ExponentialRetryStrategy(
 		5, // maxAttempts (default: 3)
-		500, // baseDelay in ms (default: 300)
+		500, // base delay in ms (default: 300)
 		30000, // maxDelay in ms (default: 10000)
 	),
 });
 
 // Disable retry for specific request
-const data = await api.request("POST", "/critical").timeout(5000).send();
+const data = await api
+	.request("POST", "/critical")
+	.retry(null)
+	.timeout(5000)
+	.send();
 ```
 
 The default retry strategy retries on:
@@ -349,10 +347,10 @@ const api = createClient({
 });
 
 // Override timeout for specific request
-const data = await api
-	.request("GET", "/slow-endpoint")
-	.timeout(30000) // 30 seconds for this request
-	.send();
+const data = await api.get("/slow-endpoint", { timeout: 30000 });
+
+// Using advanced API
+const data = await api.request("GET", "/slow-endpoint").timeout(30000).data();
 ```
 
 ### Abort Signal
@@ -362,7 +360,8 @@ const controller = new AbortController();
 
 // Using simple API
 const promise = api.get("/large-data", {
-	signal: controller.signal,
+	headers: { Accept: "application/json" },
+	timeout: 30000,
 });
 
 // Using advanced API
@@ -405,8 +404,7 @@ Prevents multiple identical requests from being sent simultaneously:
 // Enable globally
 const api = createClient({
 	baseUrl: "https://api.example.com",
-	dedupe: true
-});
+	dedupe: true,
 });
 
 // Control deduplication for specific requests using advanced API
@@ -415,10 +413,8 @@ const data = await api.httpClient.get("/data").dedupe(true).data();
 // These will return the same promise when dedupe is enabled
 const p1 = api.get("/users");
 const p2 = api.get("/users");
-console.log(p1 === p2); // true if dedupe is enabled
+// Both will resolve to the same result from a single HTTP request
 ```
-
-````
 
 ## Storage
 
@@ -435,7 +431,7 @@ const storage = new LocalStoragePersist();
 await storage.set("key", { data: "value" });
 const value = await storage.get("key");
 await storage.delete("key");
-````
+```
 
 ### MemoryStoragePersist
 
@@ -536,15 +532,14 @@ class MyApiClient {
 			baseUrl: "https://api.myservice.com",
 			authStrategy: new ApiKeyStrategy("X-API-Key", apiKey),
 			headers: {
-				Accept: "application/json"
-			}
+				Accept: "application/json",
 			},
 		});
 	}
 
 	async getUsers(page = 1): Promise<User[]> {
 		return this.api.get<User[]>("/users", {
-			query: { page, limit: 20 }
+			query: { page, limit: 20 },
 		});
 	}
 
@@ -569,38 +564,39 @@ import { useEffect, useState } from "react";
 import { createClient } from "@cordy/endpoint-builder";
 
 const api = createClient({
-	baseUrl: "https://api.example.com"
+	baseUrl: "https://api.example.com",
 });
 
 function useApi<T>(path: string) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+	const [data, setData] = useState<T | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
+	useEffect(() => {
+		const controller = new AbortController();
 
-    api.get<T>(path, {
-      signal: controller.signal
-    })
-      .then(setData)
-      .catch(setError)
-      .finally(() => setLoading(false));
+		api.httpClient
+			.get<T>(path)
+			.signal(controller.signal)
+			.data()
+			.then(setData)
+			.catch(setError)
+			.finally(() => setLoading(false));
 
-    return () => controller.abort();
-  }, [path]);
+		return () => controller.abort();
+	}, [path]);
 
-  return { data, loading, error };
+	return { data, loading, error };
 }
 
 // Usage
 function UserProfile({ userId }: { userId: number }) {
-  const { data: user, loading, error } = useApi<User>(`/users/${userId}`);
+	const { data: user, loading, error } = useApi<User>(`/users/${userId}`);
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error.message}</div>;
+	if (loading) return <div>Loading...</div>;
+	if (error) return <div>Error: {error.message}</div>;
 
-  return <div>{user?.name}</div>;
+	return <div>{user?.name}</div>;
 }
 ```
 
@@ -613,160 +609,117 @@ import { createClient } from "@cordy/endpoint-builder";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const api = createClient({
-  baseUrl: "https://api.example.com",
-  auth: "your-token"
+	baseUrl: "https://api.example.com",
+	auth: "your-token",
 });
 
 // Query functions
 const userQueries = {
-  all: () => ['users'] as const,
-  lists: () => [...userQueries.all(), 'list'] as const,
-  list: (filters: string) => [...userQueries.lists(), { filters }] as const,
-  details: () => [...userQueries.all(), 'detail'] as const,
-  detail: (id: number) => [...userQueries.details(), id] as const,
+	all: () => ["users"] as const,
+	lists: () => [...userQueries.all(), "list"] as const,
+	list: (filters: string) => [...userQueries.lists(), { filters }] as const,
+	details: () => [...userQueries.all(), "detail"] as const,
+	detail: (id: number) => [...userQueries.details(), id] as const,
 };
 
 // Fetch user list
 function useUsers() {
-  return useQuery({
-    queryKey: userQueries.lists(),
-    queryFn: () => api.get<User[]>("/users")
-  });
+	return useQuery({
+		queryKey: userQueries.lists(),
+		queryFn: () => api.get<User[]>("/users"),
+	});
 }
 
 // Fetch single user
 function useUser(id: number) {
-  return useQuery({
-    queryKey: userQueries.detail(id),
-    queryFn: () => api.get<User>(`/users/${id}`),
-    enabled: !!id
-  });
+	return useQuery({
+		queryKey: userQueries.detail(id),
+		queryFn: () => api.get<User>(`/users/${id}`),
+		enabled: !!id,
+	});
 }
 
 // Create user mutation
 function useCreateUser() {
-  const queryClient = useQueryClient();
+	const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (data: CreateUserDto) => api.post<User>("/users", data),
-    onSuccess: () => {
-      // Invalidate and refetch users list
-      queryClient.invalidateQueries({ queryKey: userQueries.lists() });
-    }
-  });
+	return useMutation({
+		mutationFn: (data: CreateUserDto) => api.post<User>("/users", data),
+		onSuccess: () => {
+			// Invalidate and refetch users list
+			queryClient.invalidateQueries({ queryKey: userQueries.lists() });
+		},
+	});
 }
 
 // Update user mutation
 function useUpdateUser() {
-  const queryClient = useQueryClient();
+	const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<User> }) =>
-      api.patch<User>(`/users/${id}`, data),
-    onSuccess: (_, { id }) => {
-      // Invalidate specific user and users list
-      queryClient.invalidateQueries({ queryKey: userQueries.detail(id) });
-      queryClient.invalidateQueries({ queryKey: userQueries.lists() });
-    }
-  });
+	return useMutation({
+		mutationFn: ({ id, data }: { id: number; data: Partial<User> }) =>
+			api.patch<User>(`/users/${id}`, data),
+		onSuccess: (_, { id }) => {
+			// Invalidate specific user and users list
+			queryClient.invalidateQueries({ queryKey: userQueries.detail(id) });
+			queryClient.invalidateQueries({ queryKey: userQueries.lists() });
+		},
+	});
 }
 
 // Delete user mutation
 function useDeleteUser() {
-  const queryClient = useQueryClient();
+	const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: (id: number) => api.delete(`/users/${id}`),
-    onSuccess: () => {
-      // Invalidate users list after deletion
-      queryClient.invalidateQueries({ queryKey: userQueries.lists() });
-    }
-  });
+	return useMutation({
+		mutationFn: (id: number) => api.delete(`/users/${id}`),
+		onSuccess: () => {
+			// Invalidate users list after deletion
+			queryClient.invalidateQueries({ queryKey: userQueries.lists() });
+		},
+	});
 }
 
 // Usage in component
 function UserList() {
-  const { data: users, isLoading, error } = useUsers();
-  const createUser = useCreateUser();
-  const updateUser = useUpdateUser();
-  const deleteUser = useDeleteUser();
+	const { data: users, isLoading, error } = useUsers();
+	const createUser = useCreateUser();
+	const updateUser = useUpdateUser();
+	const deleteUser = useDeleteUser();
 
-  const handleCreate = () => {
-    createUser.mutate({
-      name: "New User",
-      email: "user@example.com"
-    });
-  };
+	const handleCreate = () => {
+		createUser.mutate({
+			name: "New User",
+			email: "user@example.com",
+		});
+	};
 
-  const handleUpdate = (id: number) => {
-    updateUser.mutate({
-      id,
-      data: { name: "Updated Name" }
-    });
-  };
+	const handleUpdate = (id: number) => {
+		updateUser.mutate({
+			id,
+			data: { name: "Updated Name" },
+		});
+	};
 
-  const handleDelete = (id: number) => {
-    deleteUser.mutate(id);
-  };
+	const handleDelete = (id: number) => {
+		deleteUser.mutate(id);
+	};
 
-  if (isLoading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error.message}</div>;
+	if (isLoading) return <div>Loading...</div>;
+	if (error) return <div>Error: {error.message}</div>;
 
-  return (
-    <div>
-      <button onClick={handleCreate}>Create User</button>
-      {users?.map(user => (
-        <div key={user.id}>
-          {user.name}
-          <button onClick={() => handleUpdate(user.id)}>Update</button>
-          <button onClick={() => handleDelete(user.id)}>Delete</button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Advanced: Error handling and optimistic updates
-function useCreateUserOptimistic() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: CreateUserDto) => api.post<User>("/users", data),
-    onMutate: async (newUser) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: userQueries.lists() });
-
-      // Snapshot previous value
-      const previousUsers = queryClient.getQueryData(userQueries.lists());
-
-      // Optimistically update
-      queryClient.setQueryData(userQueries.lists(), (old: User[] = []) => [
-        ...old,
-        { id: Date.now(), ...newUser } // Temporary ID
-      ]);
-
-      return { previousUsers };
-    },
-    onError: (err, newUser, context) => {
-      // Rollback on error
-      queryClient.setQueryData(userQueries.lists(), context?.previousUsers);
-    },
-    onSettled: () => {
-      // Always refetch to ensure server state
-      queryClient.invalidateQueries({ queryKey: userQueries.lists() });
-    }
-  });
-}
-
-// Background refetching for fresh data
-function useUsersWithBackground() {
-  return useQuery({
-    queryKey: userQueries.lists(),
-    queryFn: () => api.get<User[]>("/users"),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
-    refetchOnWindowFocus: true,
-  });
+	return (
+		<div>
+			<button onClick={handleCreate}>Create User</button>
+			{users?.map((user) => (
+				<div key={user.id}>
+					{user.name}
+					<button onClick={() => handleUpdate(user.id)}>Update</button>
+					<button onClick={() => handleDelete(user.id)}>Delete</button>
+				</div>
+			))}
+		</div>
+	);
 }
 ```
 

@@ -20,33 +20,38 @@ export async function basicUsage() {
 	});
 
 	// GET запрос
-	const user = await client
+	const _user = await client
 		.get("/users/1")
 		.data();
+	void _user;
 
 	// POST запрос с JSON телом
-	const newUser = await client
+	const _newUser = await client
 		.post("/users")
 		.json({ name: "John", email: "john@example.com" })
 		.data();
+	void _newUser;
 
 	// PUT запрос с заголовками
-	const updatedUser = await client
+	const _updatedUser = await client
 		.put("/users/1")
 		.json({ name: "John Updated" })
 		.header("X-Custom-Header", "value")
 		.data();
+	void _updatedUser;
 
 	// DELETE запрос
-	const deleted = await client
+	const _deleted = await client
 		.delete("/users/1")
 		.data();
+	void _deleted;
 
 	// GET запрос с query параметрами
-	const searchResults = await client
+	const _searchResults = await client
 		.get("/users")
 		.query({ search: "john", page: 1, limit: 10 })
 		.data();
+	void _searchResults;
 }
 
 /**
@@ -63,9 +68,10 @@ export async function apiKeyAuthentication() {
 	});
 
 	// Теперь все запросы будут автоматически включать заголовок X-API-Key
-	const data = await client
+	const _data = await client
 		.get("/protected-resource")
 		.data();
+	void _data;
 }
 
 /**
@@ -94,9 +100,10 @@ export async function tokenAuthentication() {
 	});
 
 	// Запросы будут автоматически включать токен и обновлять его при необходимости
-	const data = await client
+	const _data2 = await client
 		.get("/protected-resource")
 		.data();
+	void _data2;
 }
 
 /**
@@ -146,9 +153,10 @@ export async function retryStrategy() {
 	});
 
 	// При ошибках 5xx или сетевых проблемах запрос будет повторяться автоматически
-	const data = await client
+	const _data3 = await client
 		.get("/resource-that-might-fail")
 		.data();
+	void _data3;
 }
 
 /**
@@ -165,10 +173,11 @@ export async function fileUpload() {
 	formData.append("description", "File description");
 
 	// Отправляем файл
-	const result = await client
+	const _result = await client
 		.post("/upload")
 		.form(formData, false) // false означает использование multipart/form-data вместо x-www-form-urlencoded
 		.data();
+	void _result;
 }
 
 /**
@@ -216,10 +225,11 @@ export async function completeExample() {
 	// Таймаут в 30 секунд
 	setTimeout(() => controller.abort(), 30000);
 
-	const fileResponse = await client
+	const _fileResponse = await client
 		.get("/large-file")
 		.responseType("blob")
 		.signal(controller.signal)
 		.timeout(30000)
 		.data();
+	void _fileResponse;
 }

@@ -33,6 +33,7 @@ async function authExample() {
 	});
 
 	// Или Bearer токен
+	// @ts-expect-error - используется только для демонстрации
 	const _apiWithToken = createClient({
 		baseUrl: "https://api.example.com",
 		auth: "your-token-123" // автоматически добавит "Bearer "
@@ -188,9 +189,8 @@ async function advancedApiExample() {
 		baseUrl: "https://jsonplaceholder.typicode.com"
 	});
 
-	// Используем продвинутый API через .advanced
-	const response = await api.advanced
-		.get("/posts")
+	// Используем продвинутый API через .request()
+	const response = await api.request("GET", "/posts")
 		.query({ _limit: 3 })
 		.header("X-Custom", "value")
 		.timeout(10000)
