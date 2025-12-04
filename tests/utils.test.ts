@@ -80,6 +80,51 @@ describe("toQuery", () => {
 		// Проверяем, что символы правильно закодированы
 		expect(result).toBe("q=search%20term%20%26%20with%20spaces&tag=%23special");
 	});
+
+	it("должен корректно обрабатывать массивы", () => {
+		const params = {
+			ids: [1, 2, 3, 4],
+			page: 1
+		};
+
+		const result = toQuery(params);
+
+		// Массивы должны быть представлены как повторяющиеся параметры
+		expect(result).toBe("ids=1&ids=2&ids=3&ids=4&page=1");
+	});
+
+	it("должен пропускать null и undefined элементы в массиве", () => {
+		const params = {
+			ids: [1, null, 2, undefined, 3],
+			active: true
+		};
+
+		const result = toQuery(params);
+
+		expect(result).toBe("ids=1&ids=2&ids=3&active=true");
+	});
+
+	it("должен корректно обрабатывать пустой массив", () => {
+		const params = {
+			ids: [],
+			page: 1
+		};
+
+		const result = toQuery(params);
+
+		expect(result).toBe("page=1");
+	});
+
+	it("должен корректно обрабатывать массивы строк", () => {
+		const params = {
+			tags: ["javascript", "typescript", "node.js"],
+			status: "active"
+		};
+
+		const result = toQuery(params);
+
+		expect(result).toBe("tags=javascript&tags=typescript&tags=node.js&status=active");
+	});
 });
 
 describe("serializeBody", () => {

@@ -2,6 +2,9 @@
  * Convert an object to a URL query string
  * @param params - Query parameters object
  * @returns URL-encoded query string
+ *
+ * Arrays are serialized as multiple query parameters with the same key:
+ * { ids: [1, 2, 3] } => "ids=1&ids=2&ids=3"
  */
 export function toQuery<Q extends Record<string, unknown>>(params: Q | undefined): string {
 	if (!params) {
@@ -12,6 +15,16 @@ export function toQuery<Q extends Record<string, unknown>>(params: Q | undefined
 
 	for (const [key, value] of Object.entries(params)) {
 		if (value === undefined || value === null) {
+			continue;
+		}
+
+		// Handle arrays by appending each element separately
+		if (Array.isArray(value)) {
+			for (const item of value) {
+				if (item !== undefined && item !== null) {
+					searchParams.append(key, String(item));
+				}
+			}
 			continue;
 		}
 
