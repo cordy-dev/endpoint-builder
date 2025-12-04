@@ -64,6 +64,9 @@
     "lint-staged": {
         "*": "npm run lint:fix"
     },
+    "engines": {
+        "node": ">=20.0.0"
+    },
     "keywords": [
         "typescript",
         "api",
