@@ -7,7 +7,7 @@ describe("URL Resolution", () => {
 
 	beforeEach(() => {
 		fetchMock = vi.fn();
-		global.fetch = fetchMock;
+		global.fetch = fetchMock as any;
 	});
 
 	it("should handle baseUrl with path correctly when request path starts with / (абсолютный путь)", async () => {
