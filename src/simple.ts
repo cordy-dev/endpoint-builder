@@ -143,21 +143,26 @@ export class UniversalClient {
 	 * Make a POST request with JSON body
 	 */
 	post<T = unknown, D extends BodyLike = BodyLike>(path: string, data?: D, options?: {
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.post<T>(path);
+		const request = this.client.post<T>(path);
 
 		if (data !== undefined) {
-			request = request.json(data as object & BodyLike);
+			request.json(data as object & BodyLike);
+		}
+
+		if (options?.query) {
+			request.query(options.query);
 		}
 
 		if (options?.headers) {
-			request = request.headers(options.headers);
+			request.headers(options.headers);
 		}
 
 		if (options?.timeout || this.defaultTimeout) {
-			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+			request.timeout(options?.timeout ?? this.defaultTimeout);
 		}
 
 		return request.data();
@@ -167,21 +172,26 @@ export class UniversalClient {
 	 * Make a PUT request with JSON body
 	 */
 	put<T = unknown, D extends BodyLike = BodyLike>(path: string, data?: D, options?: {
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.put<T>(path);
+		const request = this.client.put<T>(path);
 
 		if (data !== undefined) {
-			request = request.json(data as object & BodyLike);
+			request.json(data as object & BodyLike);
+		}
+
+		if (options?.query) {
+			request.query(options.query);
 		}
 
 		if (options?.headers) {
-			request = request.headers(options.headers);
+			request.headers(options.headers);
 		}
 
 		if (options?.timeout || this.defaultTimeout) {
-			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+			request.timeout(options?.timeout ?? this.defaultTimeout);
 		}
 
 		return request.data();
@@ -191,21 +201,26 @@ export class UniversalClient {
 	 * Make a PATCH request with JSON body
 	 */
 	patch<T = unknown, D extends BodyLike = BodyLike>(path: string, data?: D, options?: {
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.patch<T>(path);
+		const request = this.client.patch<T>(path);
 
 		if (data !== undefined) {
-			request = request.json(data as object & BodyLike);
+			request.json(data as object & BodyLike);
+		}
+
+		if (options?.query) {
+			request.query(options.query);
 		}
 
 		if (options?.headers) {
-			request = request.headers(options.headers);
+			request.headers(options.headers);
 		}
 
 		if (options?.timeout || this.defaultTimeout) {
-			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+			request.timeout(options?.timeout ?? this.defaultTimeout);
 		}
 
 		return request.data();
@@ -215,17 +230,22 @@ export class UniversalClient {
 	 * Make a DELETE request
 	 */
 	delete<T = unknown>(path: string, options?: {
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.delete<T>(path);
+		const request = this.client.delete<T>(path);
+
+		if (options?.query) {
+			request.query(options.query);
+		}
 
 		if (options?.headers) {
-			request = request.headers(options.headers);
+			request.headers(options.headers);
 		}
 
 		if (options?.timeout || this.defaultTimeout) {
-			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+			request.timeout(options?.timeout ?? this.defaultTimeout);
 		}
 
 		return request.data();
@@ -260,17 +280,22 @@ export class UniversalClient {
 	 * Make an OPTIONS request
 	 */
 	options<T = unknown>(path: string, options?: {
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.options<T>(path);
+		const request = this.client.options<T>(path);
+
+		if (options?.query) {
+			request.query(options.query);
+		}
 
 		if (options?.headers) {
-			request = request.headers(options.headers);
+			request.headers(options.headers);
 		}
 
 		if (options?.timeout || this.defaultTimeout) {
-			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+			request.timeout(options?.timeout ?? this.defaultTimeout);
 		}
 
 		return request.data();
@@ -280,6 +305,7 @@ export class UniversalClient {
 	 * Upload files using FormData
 	 */
 	upload<T = unknown>(path: string, files: Record<string, File | Blob | string>, options?: {
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
@@ -293,14 +319,18 @@ export class UniversalClient {
 			}
 		}
 
-		let request = this.client.post<T>(path).body(formData);
+		const request = this.client.post<T>(path).body(formData);
+
+		if (options?.query) {
+			request.query(options.query);
+		}
 
 		if (options?.headers) {
-			request = request.headers(options.headers);
+			request.headers(options.headers);
 		}
 
 		if (options?.timeout || this.defaultTimeout) {
-			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+			request.timeout(options?.timeout ?? this.defaultTimeout);
 		}
 
 		return request.data();
@@ -310,17 +340,22 @@ export class UniversalClient {
 	 * Download a file as Blob
 	 */
 	download(path: string, options?: {
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<Blob> {
-		let request = this.client.get<Blob>(path).responseType("blob");
+		const request = this.client.get<Blob>(path).responseType("blob");
+
+		if (options?.query) {
+			request.query(options.query);
+		}
 
 		if (options?.headers) {
-			request = request.headers(options.headers);
+			request.headers(options.headers);
 		}
 
 		if (options?.timeout || this.defaultTimeout) {
-			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+			request.timeout(options?.timeout ?? this.defaultTimeout);
 		}
 
 		return request.data();
