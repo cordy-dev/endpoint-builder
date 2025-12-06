@@ -147,12 +147,19 @@ async function fullResponseExample() {
 
 // Пример 9: CRUD операции
 async function crudExample() {
+	interface Post {
+		id: number;
+		title: string;
+		body: string;
+		userId: number;
+	}
+
 	const api = createClient({
 		baseUrl: "https://jsonplaceholder.typicode.com"
 	});
 
 	// CREATE
-	const newPost = await api.post("/posts", {
+	const newPost = await api.post<Post>("/posts", {
 		title: "New Post",
 		body: "Post content",
 		userId: 1
@@ -160,11 +167,11 @@ async function crudExample() {
 	console.log("Created:", newPost);
 
 	// READ
-	const post = await api.get(`/posts/${newPost.id}`);
+	const post = await api.get<Post>(`/posts/${newPost.id}`);
 	console.log("Read:", post);
 
 	// UPDATE
-	const updated = await api.put(`/posts/${newPost.id}`, {
+	const updated = await api.put<Post>(`/posts/${newPost.id}`, {
 		id: newPost.id,
 		title: "Updated Post",
 		body: "Updated content",
@@ -173,7 +180,7 @@ async function crudExample() {
 	console.log("Updated:", updated);
 
 	// PATCH
-	const patched = await api.patch(`/posts/${newPost.id}`, {
+	const patched = await api.patch<Post>(`/posts/${newPost.id}`, {
 		title: "Patched Title"
 	});
 	console.log("Patched:", patched);

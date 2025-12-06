@@ -13,7 +13,9 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			};
 
 			expect(strategy.shouldRetry(ctx)).toBe(true);
-		});		it("should return true for 5xx errors", () => {
+		});
+
+		it("should return true for 5xx errors", () => {
 			const strategy = new ExponentialRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
@@ -33,7 +35,9 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			};
 
 			expect(strategy.shouldRetry(ctx)).toBe(true);
-		});		it("should return false for successful responses", () => {
+		});
+
+		it("should return false for successful responses", () => {
 			const strategy = new ExponentialRetryStrategy();
 			const ctx: RetryContext = {
 				attempt: 1,
@@ -56,10 +60,37 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 		});
 
 		it("should return false if maximum number of attempts is reached", () => {
-			const strategy = new ExponentialRetryStrategy(3);
+			const strategy = new ExponentialRetryStrategy({ maxAttempts: 3 });
 			const ctx: RetryContext = {
 				attempt: 3,
 				response: new Response(null, { status: 500 }),
+				config: { url: "test", method: "GET" as const }
+			};
+
+			expect(strategy.shouldRetry(ctx)).toBe(false);
+		});
+
+		it("should retry on custom status codes", () => {
+			const strategy = new ExponentialRetryStrategy({ retryStatusCodes: [418, 503] });
+			const ctx418: RetryContext = {
+				attempt: 1,
+				response: new Response(null, { status: 418 }),
+				config: { url: "test", method: "GET" as const }
+			};
+			const ctx500: RetryContext = {
+				attempt: 1,
+				response: new Response(null, { status: 500 }),
+				config: { url: "test", method: "GET" as const }
+			};
+
+			expect(strategy.shouldRetry(ctx418)).toBe(true);
+			expect(strategy.shouldRetry(ctx500)).toBe(false); // Not in custom list
+		});
+
+		it("should not retry on network errors if disabled", () => {
+			const strategy = new ExponentialRetryStrategy({ retryOnNetworkError: false });
+			const ctx: RetryContext = {
+				attempt: 1,
 				config: { url: "test", method: "GET" as const }
 			};
 
@@ -78,7 +109,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 		});
 
 		it("should return the correct delay for the first attempt", () => {
-			const strategy = new ExponentialRetryStrategy(3, 300);
+			const strategy = new ExponentialRetryStrategy({ maxAttempts: 3, baseDelay: 300 });
 			const ctx: RetryContext = {
 				attempt: 1,
 				config: { url: "test", method: "GET" as const }
@@ -91,7 +122,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 		});
 
 		it("should return exponentially increasing delay", () => {
-			const strategy = new ExponentialRetryStrategy(3, 300);
+			const strategy = new ExponentialRetryStrategy({ maxAttempts: 3, baseDelay: 300 });
 			const ctx1: RetryContext = {
 				attempt: 1,
 				config: { url: "test", method: "GET" as const }
@@ -123,7 +154,7 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 
 		it("should limit the maximum delay", () => {
 			const maxDelay = 1000;
-			const strategy = new ExponentialRetryStrategy(5, 300, maxDelay);
+			const strategy = new ExponentialRetryStrategy({ maxAttempts: 5, baseDelay: 300, maxDelay });
 			const ctx: RetryContext = {
 				attempt: 5, // Large value to exceed maxDelay
 				config: { url: "test", method: "GET" as const }
@@ -133,6 +164,36 @@ describe("JitteredExponentialBackoffRetryStrategy", () => {
 			// exp = min(300 * 2^4 = 4800, 1000) = 1000
 			// jittered = 1000/2 + 0.5 * (1000/2) = 500 + 250 = 750
 			expect(strategy.nextDelay(ctx)).toBe(750);
+		});
+
+		it("should respect Retry-After header with seconds", () => {
+			const strategy = new ExponentialRetryStrategy({ respectRetryAfter: true, maxDelay: 60000 });
+			const response = new Response(null, {
+				status: 429,
+				headers: { "Retry-After": "5" }
+			});
+			const ctx: RetryContext = {
+				attempt: 1,
+				response,
+				config: { url: "test", method: "GET" as const }
+			};
+
+			expect(strategy.nextDelay(ctx)).toBe(5000); // 5 seconds = 5000ms
+		});
+
+		it("should cap Retry-After to maxDelay", () => {
+			const strategy = new ExponentialRetryStrategy({ respectRetryAfter: true, maxDelay: 2000 });
+			const response = new Response(null, {
+				status: 429,
+				headers: { "Retry-After": "10" }
+			});
+			const ctx: RetryContext = {
+				attempt: 1,
+				response,
+				config: { url: "test", method: "GET" as const }
+			};
+
+			expect(strategy.nextDelay(ctx)).toBe(2000); // Capped to maxDelay
 		});
 	});
 });

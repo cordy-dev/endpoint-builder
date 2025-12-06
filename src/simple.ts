@@ -5,13 +5,12 @@
 
 import { ApiKeyStrategy } from "./auth/ApiKeyStrategy";
 import type { AuthStrategy } from "./auth/AuthStrategy";
-import { OpaqueTokenStrategy } from "./auth/OpaqueTokenStrategy";
 import { HttpClient } from "./core/HttpClient";
-import type { RequestBuilder } from "./core/RequestBuilder";
+import { RequestBuilder } from "./core/RequestBuilder";
 import { ExponentialRetryStrategy } from "./retry/ExponentialRetryStrategy";
 import type { RetryStrategy } from "./retry/RetryStrategy";
 import type { PersistStorage } from "./storage/PersistStorage";
-import type { HttpHeaders, HttpResponse } from "./types";
+import type { BodyLike, HttpHeaders, HttpMethod, HttpResponse, QueryParams, RequestInterceptor, ResponseInterceptor } from "./types";
 
 export interface UniversalClientOptions {
 	/** Base URL for all requests */
@@ -48,6 +47,10 @@ export interface UniversalClientOptions {
 	dedupe?: boolean;
 	/** Default response type */
 	responseType?: "json" | "text" | "blob" | "arraybuffer" | "stream";
+	/** Request interceptors */
+	requestInterceptors?: RequestInterceptor[];
+	/** Response interceptors */
+	responseInterceptors?: ResponseInterceptor[];
 }
 
 /**
@@ -69,7 +72,9 @@ export class UniversalClient {
 			retryStrategy,
 			timeout = 30000,
 			dedupe = true,
-			responseType
+			responseType,
+			requestInterceptors,
+			responseInterceptors
 		} = options;
 
 		// Determine auth strategy with priority: authStrategy > apiKey > auth
@@ -82,11 +87,6 @@ export class UniversalClient {
 		} else if (auth) {
 			const authValue = auth.startsWith("Bearer ") ? auth : `Bearer ${auth}`;
 			finalAuthStrategy = new ApiKeyStrategy("Authorization", authValue);
-		}
-
-		// Handle storage for OpaqueTokenStrategy
-		if (finalAuthStrategy instanceof OpaqueTokenStrategy && storage) {
-			// Storage is already configured in the strategy
 		}
 
 		// Determine retry strategy
@@ -105,6 +105,8 @@ export class UniversalClient {
 			retryStrategy: finalRetryStrategy,
 			dedupe,
 			responseType,
+			requestInterceptors,
+			responseInterceptors,
 		});
 
 		this.defaultTimeout = timeout;
@@ -115,23 +117,23 @@ export class UniversalClient {
 	/**
 	 * Make a GET request
 	 */
-	get<T = any>(path: string, options?: {
-		query?: Record<string, any>;
+	get<T = unknown>(path: string, options?: {
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.get<T>(path) as any;
+		const request = this.client.get<T>(path);
 
 		if (options?.query) {
-			request = request.query(options.query);
+			request.query(options.query);
 		}
 
 		if (options?.headers) {
-			request = request.headers(options.headers);
+			request.headers(options.headers);
 		}
 
 		if (options?.timeout || this.defaultTimeout) {
-			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+			request.timeout(options?.timeout ?? this.defaultTimeout);
 		}
 
 		return request.data();
@@ -140,14 +142,14 @@ export class UniversalClient {
 	/**
 	 * Make a POST request with JSON body
 	 */
-	post<T = any>(path: string, data?: any, options?: {
+	post<T = unknown, D extends BodyLike = BodyLike>(path: string, data?: D, options?: {
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.post<T>(path) as any;
+		let request = this.client.post<T>(path);
 
 		if (data !== undefined) {
-			request = request.json(data);
+			request = request.json(data as object & BodyLike);
 		}
 
 		if (options?.headers) {
@@ -164,14 +166,14 @@ export class UniversalClient {
 	/**
 	 * Make a PUT request with JSON body
 	 */
-	put<T = any>(path: string, data?: any, options?: {
+	put<T = unknown, D extends BodyLike = BodyLike>(path: string, data?: D, options?: {
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.put<T>(path) as any;
+		let request = this.client.put<T>(path);
 
 		if (data !== undefined) {
-			request = request.json(data);
+			request = request.json(data as object & BodyLike);
 		}
 
 		if (options?.headers) {
@@ -188,14 +190,14 @@ export class UniversalClient {
 	/**
 	 * Make a PATCH request with JSON body
 	 */
-	patch<T = any>(path: string, data?: any, options?: {
+	patch<T = unknown, D extends BodyLike = BodyLike>(path: string, data?: D, options?: {
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.patch<T>(path) as any;
+		let request = this.client.patch<T>(path);
 
 		if (data !== undefined) {
-			request = request.json(data);
+			request = request.json(data as object & BodyLike);
 		}
 
 		if (options?.headers) {
@@ -212,11 +214,56 @@ export class UniversalClient {
 	/**
 	 * Make a DELETE request
 	 */
-	delete<T = any>(path: string, options?: {
+	delete<T = unknown>(path: string, options?: {
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
-		let request = this.client.delete<T>(path) as any;
+		let request = this.client.delete<T>(path);
+
+		if (options?.headers) {
+			request = request.headers(options.headers);
+		}
+
+		if (options?.timeout || this.defaultTimeout) {
+			request = request.timeout(options?.timeout ?? this.defaultTimeout);
+		}
+
+		return request.data();
+	}
+
+	/**
+	 * Make a HEAD request
+	 */
+	head(path: string, options?: {
+		query?: QueryParams;
+		headers?: HttpHeaders;
+		timeout?: number;
+	}): Promise<HttpResponse<void>> {
+		const request = this.client.head(path);
+
+		if (options?.query) {
+			request.query(options.query);
+		}
+
+		if (options?.headers) {
+			request.headers(options.headers);
+		}
+
+		if (options?.timeout || this.defaultTimeout) {
+			request.timeout(options?.timeout ?? this.defaultTimeout);
+		}
+
+		return request.send();
+	}
+
+	/**
+	 * Make an OPTIONS request
+	 */
+	options<T = unknown>(path: string, options?: {
+		headers?: HttpHeaders;
+		timeout?: number;
+	}): Promise<T> {
+		let request = this.client.options<T>(path);
 
 		if (options?.headers) {
 			request = request.headers(options.headers);
@@ -232,21 +279,21 @@ export class UniversalClient {
 	/**
 	 * Upload files using FormData
 	 */
-	upload<T = any>(path: string, files: Record<string, File | string>, options?: {
+	upload<T = unknown>(path: string, files: Record<string, File | Blob | string>, options?: {
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<T> {
 		const formData = new FormData();
 
 		for (const [key, value] of Object.entries(files)) {
-			if (value instanceof File) {
+			if (value instanceof File || value instanceof Blob) {
 				formData.append(key, value);
 			} else {
 				formData.append(key, String(value));
 			}
 		}
 
-		let request = this.client.post<T>(path).body(formData) as any;
+		let request = this.client.post<T>(path).body(formData);
 
 		if (options?.headers) {
 			request = request.headers(options.headers);
@@ -266,7 +313,7 @@ export class UniversalClient {
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<Blob> {
-		let request = this.client.get(path).responseType("blob") as any;
+		let request = this.client.get<Blob>(path).responseType("blob");
 
 		if (options?.headers) {
 			request = request.headers(options.headers);
@@ -282,13 +329,13 @@ export class UniversalClient {
 	/**
 	 * Get the full response (not just data)
 	 */
-	response<T = any>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, options?: {
-		data?: any;
-		query?: Record<string, any>;
+	response<T = unknown>(method: HttpMethod, path: string, options?: {
+		data?: BodyLike;
+		query?: QueryParams;
 		headers?: HttpHeaders;
 		timeout?: number;
 	}): Promise<HttpResponse<T>> {
-		let request: any;
+		let request: RequestBuilder<T, BodyLike, Record<string, unknown> | undefined>;
 
 		switch (method) {
 			case "GET":
@@ -306,10 +353,16 @@ export class UniversalClient {
 			case "DELETE":
 				request = this.client.delete<T>(path);
 				break;
+			case "HEAD":
+				request = this.client.head(path) as RequestBuilder<T, BodyLike, Record<string, unknown> | undefined>;
+				break;
+			case "OPTIONS":
+				request = this.client.options<T>(path);
+				break;
 		}
 
 		if (options?.data !== undefined) {
-			request = request.json(options.data);
+			request = request.json(options.data as object & BodyLike);
 		}
 
 		if (options?.query) {
@@ -333,18 +386,22 @@ export class UniversalClient {
 	 * Get a RequestBuilder for advanced request configuration
 	 * This gives you access to the full builder pattern API
 	 */
-	request<T = any>(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string): RequestBuilder<T, any, any> {
+	request<T = unknown>(method: HttpMethod, path: string): RequestBuilder<T, BodyLike, Record<string, unknown> | undefined> {
 		switch (method) {
 			case "GET":
-				return this.client.get<T>(path) as any;
+				return this.client.get<T>(path);
 			case "POST":
-				return this.client.post<T>(path) as any;
+				return this.client.post<T>(path);
 			case "PUT":
-				return this.client.put<T>(path) as any;
+				return this.client.put<T>(path);
 			case "PATCH":
-				return this.client.patch<T>(path) as any;
+				return this.client.patch<T>(path);
 			case "DELETE":
-				return this.client.delete<T>(path) as any;
+				return this.client.delete<T>(path);
+			case "HEAD":
+				return this.client.head(path) as RequestBuilder<T, BodyLike, Record<string, unknown> | undefined>;
+			case "OPTIONS":
+				return this.client.options<T>(path);
 		}
 	}
 
@@ -353,6 +410,26 @@ export class UniversalClient {
 	 */
 	get httpClient(): HttpClient {
 		return this.client;
+	}
+
+	// === INTERCEPTORS ===
+
+	/**
+	 * Add a request interceptor
+	 * @param interceptor - Request interceptor to add
+	 * @returns Function to remove the interceptor
+	 */
+	addRequestInterceptor(interceptor: RequestInterceptor): () => void {
+		return this.client.addRequestInterceptor(interceptor);
+	}
+
+	/**
+	 * Add a response interceptor
+	 * @param interceptor - Response interceptor to add
+	 * @returns Function to remove the interceptor
+	 */
+	addResponseInterceptor(interceptor: ResponseInterceptor): () => void {
+		return this.client.addResponseInterceptor(interceptor);
 	}
 }
 

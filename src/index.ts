@@ -3,13 +3,14 @@
 // ========================================
 
 export type { UniversalClientOptions } from "./simple";
-export { createClient } from "./simple";
+export { createClient, UniversalClient } from "./simple";
 
 // ========================================
 // DIRECT ACCESS TO CLASSES (ADVANCED)
 // ========================================
 
 // Core
+export type { HttpClientOptions } from "./core/HttpClient";
 export { HttpClient } from "./core/HttpClient";
 export { RequestBuilder } from "./core/RequestBuilder";
 
@@ -19,8 +20,9 @@ export type { AuthStrategy } from "./auth/AuthStrategy";
 export { OpaqueTokenStrategy } from "./auth/OpaqueTokenStrategy";
 
 // Retry Strategies
+export { ExponentialRetryStrategy } from "./retry/ExponentialRetryStrategy";
 export { ExponentialRetryStrategy as JitteredExponentialBackoffRetryStrategy } from "./retry/ExponentialRetryStrategy";
-export type { RetryStrategy } from "./retry/RetryStrategy";
+export type { RetryContext, RetryStrategy } from "./retry/RetryStrategy";
 
 // Storage
 export { LocalStoragePersist } from "./storage/LocalStoragePersist";
@@ -29,11 +31,15 @@ export type { PersistStorage } from "./storage/PersistStorage";
 
 // Types
 export type {
+	BodyLike,
 	HttpError,
 	HttpHeaders,
 	HttpMethod,
 	HttpRequestConfig,
 	HttpResponse,
+	QueryParams,
+	RequestInterceptor,
+	ResponseInterceptor,
 	ResponseType
 } from "./types";
 

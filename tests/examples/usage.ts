@@ -140,11 +140,11 @@ export async function errorHandling() {
  */
 export async function retryStrategy() {
 	// Создаем стратегию повторных попыток
-	const retry = new ExponentialRetryStrategy(
-		3,      // максимум 3 попытки
-		500,    // базовая задержка 500 мс
-		10000   // максимальная задержка 10 секунд
-	);
+	const retry = new ExponentialRetryStrategy({
+		maxAttempts: 3,      // максимум 3 попытки
+		baseDelay: 500,      // базовая задержка 500 мс
+		maxDelay: 10000      // максимальная задержка 10 секунд
+	});
 
 	// Создаем HTTP клиент со стратегией повторных попыток
 	const client = new HttpClient({
@@ -194,7 +194,7 @@ export async function completeExample() {
 	);
 
 	// Настраиваем стратегию повторных попыток
-	const retry = new ExponentialRetryStrategy(3);
+	const retry = new ExponentialRetryStrategy({ maxAttempts: 3 });
 
 	// Создаем HTTP клиент со всеми настройками
 	const client = new HttpClient({

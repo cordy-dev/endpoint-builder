@@ -1,8 +1,8 @@
 import type { AuthStrategy } from "../auth";
 import type { RetryStrategy } from "../retry/RetryStrategy";
-import type { HttpHeaders, HttpMethod, HttpResponse, ResponseType } from "../types";
+import type { BodyLike, HttpHeaders, HttpMethod, HttpResponse, ResponseType } from "../types";
 import { mergeHeaders } from "../utils/mergeHeaders";
-import type { BodyLike, HttpClient } from "./HttpClient";
+import type { HttpClient } from "./HttpClient";
 
 export interface RequestOptions<TBody = BodyLike, TQuery extends Record<string, unknown> | undefined = undefined> {
 	body?: TBody;

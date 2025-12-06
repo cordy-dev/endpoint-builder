@@ -85,11 +85,11 @@ async function advancedAuth() {
 async function advancedRetry() {
 	const api = createClient({
 		baseUrl: "https://api.example.com",
-		retryStrategy: new ExponentialRetryStrategy(
-			10,    // максимум 10 попыток
-			2000,  // начальная задержка 2 секунды
-			60000  // максимальная задержка 1 минута
-		)
+		retryStrategy: new ExponentialRetryStrategy({
+			maxAttempts: 10,    // максимум 10 попыток
+			baseDelay: 2000,    // начальная задержка 2 секунды
+			maxDelay: 60000     // максимальная задержка 1 минута
+		})
 	});
 
 	const data = await api.get("/flaky-endpoint");
@@ -130,7 +130,7 @@ async function mixedUsage() {
 	const advancedResponse = await api.request("GET", "/advanced")
 		.timeout(30000)
 		.header("X-Special", "value")
-		.retry(new ExponentialRetryStrategy(5, 500, 10000))
+		.retry(new ExponentialRetryStrategy({ maxAttempts: 5, baseDelay: 500, maxDelay: 10000 }))
 		.send();
 
 	// Доступ к полному HttpClient
@@ -158,7 +158,7 @@ async function fullFeatured() {
 		),
 
 		// Кастомные настройки
-		retryStrategy: new ExponentialRetryStrategy(7, 1000, 30000),
+		retryStrategy: new ExponentialRetryStrategy({ maxAttempts: 7, baseDelay: 1000, maxDelay: 30000 }),
 		timeout: 15000,
 		dedupe: true,
 

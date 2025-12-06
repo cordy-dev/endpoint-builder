@@ -33,7 +33,7 @@ describe("Integration tests for endpoint-builder", () => {
 			const authStrategy = new ApiKeyStrategy("X-API-Key", "test-api-key-12345");
 
 			// Создаем стратегию повторных попыток с максимум 2 попытками
-			const retryStrategy = new ExponentialRetryStrategy(2, 100, 1000);
+			const retryStrategy = new ExponentialRetryStrategy({ maxAttempts: 2, baseDelay: 100, maxDelay: 1000 });
 
 			// Создаем HTTP клиент со всеми настройками
 			const client = new HttpClient({
@@ -122,7 +122,7 @@ describe("Integration tests for endpoint-builder", () => {
 			// Создаем HTTP клиент с настроенной стратегией повторных попыток
 			const client = new HttpClient({
 				baseUrl: "https://api.example.com",
-				retryStrategy: new ExponentialRetryStrategy(3, 1) // Маленькая задержка для тестов
+				retryStrategy: new ExponentialRetryStrategy({ maxAttempts: 3, baseDelay: 1 }) // Маленькая задержка для тестов
 			});
 
 			// Выполняем запрос

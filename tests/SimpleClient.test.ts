@@ -24,7 +24,7 @@ describe("UniversalClient", () => {
 		const client = createClient({
 			baseUrl: "https://api.example.com",
 			authStrategy: new ApiKeyStrategy("X-API-Key", "test-key"),
-			retryStrategy: new ExponentialRetryStrategy(5, 1000, 30000),
+			retryStrategy: new ExponentialRetryStrategy({ maxAttempts: 5, baseDelay: 1000, maxDelay: 30000 }),
 			dedupe: false
 		});
 		expect(client).toBeInstanceOf(UniversalClient);

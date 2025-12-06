@@ -2,16 +2,17 @@ import type { AuthStrategy } from "../auth/AuthStrategy";
 import { ExponentialRetryStrategy } from "../retry/ExponentialRetryStrategy";
 import type { RetryContext, RetryStrategy } from "../retry/RetryStrategy";
 import { LocalStoragePersist } from "../storage/LocalStoragePersist";
+import { MemoryStoragePersist } from "../storage/MemoryStoragePersist";
 import type { PersistStorage } from "../storage/PersistStorage";
-import type { HttpError, HttpHeaders, HttpRequestConfig, HttpResponse, ResponseType } from "../types";
+import type { BodyLike, HttpError, HttpHeaders, HttpRequestConfig, HttpResponse, RequestInterceptor, ResponseInterceptor, ResponseType } from "../types";
 import { decodeResponse } from "../utils/decodeResponse";
 import { mergeHeaders } from "../utils/mergeHeaders";
 import { serializeBody } from "../utils/serializeBody";
 import { toQuery } from "../utils/toQuery";
 import { RequestBuilder } from "./RequestBuilder";
 
-export type Method   = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export type BodyLike = BodyInit | Record<string, unknown> | null | undefined;
+// Pre-compiled regex for better performance
+const HTTP_URL_REGEX = /^https?:\/\//;
 
 
 export interface HttpClientOptions {
@@ -22,23 +23,74 @@ export interface HttpClientOptions {
   dedupe?: boolean;
   responseType?: ResponseType;
   retryStrategy?: RetryStrategy | null;
+  /** Request interceptors - called before each request */
+  requestInterceptors?: RequestInterceptor[];
+  /** Response interceptors - called after each response */
+  responseInterceptors?: ResponseInterceptor[];
+}
+
+/**
+ * Auto-detect the best storage for the current environment
+ */
+function createDefaultStorage(): PersistStorage {
+	if (typeof localStorage !== "undefined") {
+		return new LocalStoragePersist();
+	}
+	return new MemoryStoragePersist();
 }
 
 export class HttpClient {
 	readonly defaults: Required<HttpClientOptions>;
 	private readonly inflight = new Map<string, Promise<unknown>>();
+	private readonly requestInterceptors: RequestInterceptor[];
+	private readonly responseInterceptors: ResponseInterceptor[];
 
 	constructor(opts: HttpClientOptions = {}) {
+		this.requestInterceptors = opts.requestInterceptors ?? [];
+		this.responseInterceptors = opts.responseInterceptors ?? [];
+
 		this.defaults = {
 			baseUrl: "",
 			auth: null,
-			storage: opts.storage ?? new LocalStoragePersist(),
+			storage: opts.storage ?? createDefaultStorage(),
 			dedupe: false,
 			defaultHeaders: {},
 			responseType: undefined,
 			retryStrategy: new ExponentialRetryStrategy(),
+			requestInterceptors: this.requestInterceptors,
+			responseInterceptors: this.responseInterceptors,
 			...opts,
 		} as Required<HttpClientOptions>;
+	}
+
+	/**
+	 * Add a request interceptor
+	 * @param interceptor - Request interceptor to add
+	 * @returns Function to remove the interceptor
+	 */
+	addRequestInterceptor(interceptor: RequestInterceptor): () => void {
+		this.requestInterceptors.push(interceptor);
+		return () => {
+			const index = this.requestInterceptors.indexOf(interceptor);
+			if (index !== -1) {
+				this.requestInterceptors.splice(index, 1);
+			}
+		};
+	}
+
+	/**
+	 * Add a response interceptor
+	 * @param interceptor - Response interceptor to add
+	 * @returns Function to remove the interceptor
+	 */
+	addResponseInterceptor(interceptor: ResponseInterceptor): () => void {
+		this.responseInterceptors.push(interceptor);
+		return () => {
+			const index = this.responseInterceptors.indexOf(interceptor);
+			if (index !== -1) {
+				this.responseInterceptors.splice(index, 1);
+			}
+		};
 	}
 
 	/**
@@ -95,6 +147,25 @@ export class HttpClient {
 	}
 
 	/**
+	 * Creates a HEAD request builder
+	 * @param path - Request path
+	 * @template Q - Query parameters type
+	 */
+	head<Q extends Record<string, unknown> | undefined = undefined>(path: string) {
+		return new RequestBuilder<void, undefined, Q>(this, path).method("HEAD");
+	}
+
+	/**
+	 * Creates an OPTIONS request builder
+	 * @param path - Request path
+	 * @template T - Expected response type
+	 * @template Q - Query parameters type
+	 */
+	options<T = any, Q extends Record<string, unknown> | undefined = undefined>(path: string) {
+		return new RequestBuilder<T, undefined, Q>(this, path).method("OPTIONS");
+	}
+
+	/**
 	 * Execute a request with retry, deduplication, and authentication handling
 	 * @param rb - Request builder to execute
 	 * @returns Promise resolving to HTTP response
@@ -113,7 +184,12 @@ export class HttpClient {
 
 			while (true) {
 				attempt++;
-				const config = await this._buildConfig(rb);
+				let config = await this._buildConfig(rb);
+
+				// Apply request interceptors
+				for (const interceptor of this.requestInterceptors) {
+					config = await interceptor.onRequest(config);
+				}
 
 				// Setup abort controller and timeout
 				const controller = config.signal ? undefined : new AbortController();
@@ -132,18 +208,15 @@ export class HttpClient {
 					});
 				} catch (err) {
 					// Rethrow abort errors, they are intentional
-					if ((err as any).name === "AbortError") throw err;
+					if ((err as Error).name === "AbortError") throw err;
 				} finally {
 					clearTimeout(timeoutId);
 				}
 
 				// Handle token refresh if authentication fails
-				if (response && this.defaults.auth) {
-					// Use new method name, fallback to deprecated one for backward compatibility
-					if (this.defaults.auth.handleRequestError) {
-						if (await this.defaults.auth.handleRequestError(new Request(config.url), response)) {
-							continue; // retry immediately, don't count as retry attempt
-						}
+				if (response && this.defaults.auth?.handleRequestError) {
+					if (await this.defaults.auth.handleRequestError(new Request(config.url), response)) {
+						continue; // retry immediately, don't count as retry attempt
 					}
 				}
 
@@ -167,7 +240,7 @@ export class HttpClient {
 
 				// Handle error responses
 				if (!response || !response.ok) {
-					const error = new Error(`HTTP ${(response && response.status) || "fetch"}`) as HttpError;
+					let error = new Error(`HTTP ${(response && response.status) || "fetch"}`) as HttpError;
 					error.config = config;
 
 					if (response) {
@@ -182,18 +255,32 @@ export class HttpClient {
 						};
 					}
 
+					// Apply error interceptors
+					for (const interceptor of this.responseInterceptors) {
+						if (interceptor.onError) {
+							error = await interceptor.onError(error);
+						}
+					}
+
 					throw error;
 				}
 
 				// Process successful response
 				const data = await decodeResponse<T>(response, config);
-				return {
+				let result: HttpResponse<T> = {
 					data,
 					status: response.status,
 					statusText: response.statusText,
 					headers: this._respHeaders(response),
 					config
 				};
+
+				// Apply response interceptors
+				for (const interceptor of this.responseInterceptors) {
+					result = await interceptor.onResponse(result);
+				}
+
+				return result;
 			}
 		};
 
@@ -243,7 +330,7 @@ export class HttpClient {
 		}
 
 		// If path starts with protocol (full URL), use it as is
-		if (path.match(/^https?:\/\//)) {
+		if (HTTP_URL_REGEX.test(path)) {
 			return new URL(path);
 		}
 
