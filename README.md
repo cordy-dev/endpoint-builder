@@ -1,6 +1,6 @@
 # endpoint-builder
 
-A modern, lightweight HTTP client for TypeScript and JavaScript applications with zero dependencies. Built on the native Fetch API with powerful features for real-world applications.
+A modern, type-safe HTTP client for TypeScript with runtime validation. Built on the native Fetch API with zero dependencies.
 
 [![npm version](https://img.shields.io/npm/v/@cordy/endpoint-builder.svg)](https://www.npmjs.com/package/@cordy/endpoint-builder)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,14 +8,15 @@ A modern, lightweight HTTP client for TypeScript and JavaScript applications wit
 
 ## Features
 
-- 🚀 **Zero Dependencies** - Built on native Fetch API
-- 🔒 **Type Safe** - Full TypeScript support with generics
-- 🔄 **Smart Retries** - Configurable exponential backoff with jitter
-- 🎯 **Request Deduplication** - Automatic deduplication of identical requests
-- 🔐 **Authentication** - Pluggable auth strategies with automatic token refresh
-- 💾 **Flexible Storage** - Pluggable storage backends for tokens and data
-- ⚡ **Modern API** - Async/await and method chaining
-- 🎨 **Clean Architecture** - Separation of concerns with strategies pattern
+- **Type-Safe Path Parameters** - Auto-extract params from URL strings like `/users/:id`
+- **Runtime Validation** - Validate responses with Standard Schema (zod, valibot, arktype)
+- **Safe Mode** - Rust-inspired Result type with `.safe()` for error handling
+- **Auth Helpers** - Built-in helpers for Bearer, API Key, Basic, and Refresh Token auth
+- **Response Unwrapping** - Global and per-request unwrap for wrapped API responses
+- **Transform Chains** - Type-safe data transformations after validation
+- **Smart Retries** - Configurable exponential backoff with jitter
+- **Request Deduplication** - Automatic deduplication of identical requests
+- **Zero Dependencies** - Built on native Fetch API
 
 ## Installation
 
@@ -24,711 +25,524 @@ npm install @cordy/endpoint-builder
 ```
 
 ```bash
-yarn add @cordy/endpoint-builder
-```
-
-```bash
 pnpm add @cordy/endpoint-builder
 ```
 
 ## Quick Start
 
-### 🚀 Universal API - One Client for All Use Cases
-
 ```typescript
 import { createClient } from "@cordy/endpoint-builder";
 
-// Simple usage
 const api = createClient({
-	baseUrl: "https://api.example.com",
-	auth: "your-token-here", // Auto-detects Bearer token
+  baseUrl: "https://api.example.com",
+  auth: "your-token-here",
 });
 
-const users = await api.get("/users");
-const newUser = await api.post("/users", {
-	name: "John",
-	email: "john@example.com",
-});
+// Type-safe path parameters
+const user = await api
+  .get("/users/:id", { params: { id: 1 } }) // TypeScript enforces params!
+  .data();
+
+// Create a user
+const newUser = await api
+  .post("/users", { body: { name: "John", email: "john@example.com" } })
+  .data();
 ```
 
-### 🔧 Advanced Configuration in the Same Client
+## Type-Safe Path Parameters
+
+Path parameters are automatically extracted from URL strings:
 
 ```typescript
-import {
-	createClient,
-	ApiKeyStrategy,
-	ExponentialRetryStrategy,
-} from "@cordy/endpoint-builder";
+// TypeScript requires params: { id: string | number }
+const user = await api
+  .get("/users/:id", { params: { id: 123 } })
+  .data();
 
-const api = createClient({
-	baseUrl: "https://api.example.com",
+// Multiple params - all required!
+const comment = await api
+  .get("/posts/:postId/comments/:commentId", {
+    params: { postId: 1, commentId: 5 }
+  })
+  .data();
 
-	// Simple options
-	timeout: 10000,
-	retry: true,
-	headers: { "X-App": "MyApp" },
-
-	// Advanced options
-	authStrategy: new ApiKeyStrategy("Custom-Header", "secret"),
-	retryStrategy: new ExponentialRetryStrategy(5, 1000, 30000),
-	dedupe: true,
-});
-
-// Simple methods
-const users = await api.get("/users");
-
-// Advanced methods on the same client
-const response = await api
-	.request("GET", "/advanced")
-	.timeout(30000)
-	.header("X-Special", "value")
-	.send();
-
-// Full HttpClient access when needed
-const fullControl = await api.httpClient.get("/complex").retry(null).data();
+// No params needed for static paths
+const users = await api.get("/users").data();
 ```
 
-## HTTP Methods
+## Schema Validation with Standard Schema
 
-All methods are available through the unified `createClient()` API:
-
-### Basic Usage
+Validate responses at runtime using any Standard Schema compatible library (zod, valibot, arktype):
 
 ```typescript
 import { createClient } from "@cordy/endpoint-builder";
+import { z } from "zod";
 
 const api = createClient({ baseUrl: "https://api.example.com" });
 
-// GET requests
-const user = await api.get("/users/1");
-const users = await api.get("/users", { query: { page: 2, limit: 20 } });
-
-// POST requests
-const created = await api.post("/users", {
-	name: "Jane",
-	email: "jane@example.com",
+// Define your schema
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.string().email(),
 });
 
-// PUT/PATCH requests
-const updated = await api.put("/users/1", { name: "Jane Updated" });
-const patched = await api.patch("/users/1", { name: "Jane Patched" });
+// Validate response - throws ValidationError if invalid
+const user = await api
+  .get("/users/:id", { params: { id: 1 } })
+  .schema(UserSchema); // Type inferred from schema!
 
-// DELETE requests
-await api.delete("/users/1");
-
-// Get full response instead of just data
-const response = await api.response("GET", "/users/1");
-console.log(response.status); // 200
-console.log(response.data); // User object
+// user is typed as { id: number; name: string; email: string }
+console.log(user.name);
 ```
 
-### File Operations
+### Using with Valibot
 
 ```typescript
-// File upload
-const uploaded = await api.upload("/upload", {
-	file: fileInput.files[0],
-	description: "My document",
+import * as v from "valibot";
+
+const UserSchema = v.object({
+  id: v.number(),
+  name: v.string(),
+  email: v.pipe(v.string(), v.email()),
 });
 
-// File download
-const fileBlob = await api.download("/files/document.pdf");
-
-// Create download link
-const url = URL.createObjectURL(fileBlob);
-const a = document.createElement("a");
-a.href = url;
-a.download = "document.pdf";
-a.click();
-URL.revokeObjectURL(url);
+const user = await api
+  .get("/users/:id", { params: { id: 1 } })
+  .schema(UserSchema);
 ```
 
-### Advanced Usage with RequestBuilder
+## Safe Mode - Error Handling
 
-For fine-grained control, use the `.request()` method:
+Use `.safe()` for Result-style error handling instead of throwing:
 
 ```typescript
-// Advanced request with precise control
-const response = await api
-	.request("POST", "/users")
-	.timeout(5000)
-	.header("X-Custom", "value")
-	.json({ name: "John", email: "john@example.com" })
-	.send();
+const result = await api
+  .get("/users/:id", { params: { id: 999 } })
+  .schema(UserSchema)
+  .safe();
 
-// File upload with custom headers
-const formData = new FormData();
-formData.append("file", file);
+if (result.error) {
+  // Handle error (ValidationError, HttpError, or network error)
+  console.error("Failed:", result.error.message);
+  return;
+}
 
-const uploaded = await api
-	.request("POST", "/upload")
-	.timeout(30000)
-	.header("X-Upload-Type", "document")
-	.body(formData)
-	.send();
+// TypeScript knows result.data is defined here
+console.log(result.data.name);
 ```
 
-### Expert Level - Direct HttpClient Access
-
-When you need maximum control:
+### Error Types
 
 ```typescript
-// Access the underlying HttpClient
-const client = api.httpClient;
+import { ValidationError, HttpError } from "@cordy/endpoint-builder";
 
-// Full control over the request
-const user = await client
-	.get("/users/1")
-	.dedupe(false)
-	.retry(null)
-	.responseType("json")
-	.data();
+const result = await api.get("/users/:id", { params: { id: 1 } })
+  .schema(UserSchema)
+  .safe();
 
-// Complex authentication override
-const data = await client
-	.post("/secure")
-	.auth(customAuthStrategy)
-	.json({ sensitive: "data" })
-	.data();
+if (result.error) {
+  if (result.error instanceof ValidationError) {
+    // Response didn't match schema
+    console.error("Invalid data:", result.error.issues);
+  } else if ((result.error as HttpError).status) {
+    // HTTP error (4xx, 5xx)
+    const httpError = result.error as HttpError;
+    console.error(`HTTP ${httpError.status}:`, httpError.statusText);
+  } else {
+    // Network error
+    console.error("Network error:", result.error.message);
+  }
+}
 ```
 
 ## Authentication
 
-### Simple Authentication (Auto-Detection)
-
-The unified API automatically detects common authentication patterns:
+### Simple Auth Options
 
 ```typescript
-import { createClient } from "@cordy/endpoint-builder";
-
-// Bearer token (auto-detected)
+// Bearer token
 const api = createClient({
-	baseUrl: "https://api.example.com",
-	auth: "your-token-here", // Automatically becomes "Bearer your-token-here"
+  baseUrl: "https://api.example.com",
+  auth: "your-token", // Becomes "Bearer your-token"
 });
 
-// API key (auto-detected)
+// API Key
 const api = createClient({
-	baseUrl: "https://api.example.com",
-	apiKey: "your-api-key", // Automatically becomes "X-API-Key: your-api-key"
-});
-
-// Custom headers
-const api = createClient({
-	baseUrl: "https://api.example.com",
-	headers: {
-		Authorization: "Custom your-token",
-		"X-Custom-Auth": "secret",
-	},
+  baseUrl: "https://api.example.com",
+  apiKey: "your-api-key", // Becomes "X-API-Key: your-api-key"
 });
 ```
 
-### Advanced Authentication Strategies
+### Auth Helpers
 
-For complex scenarios, use explicit strategies:
-
-```typescript
-import {
-	createClient,
-	ApiKeyStrategy,
-	OpaqueTokenStrategy,
-	LocalStoragePersist,
-} from "@cordy/endpoint-builder";
-
-// Custom API key strategy
-const api = createClient({
-	baseUrl: "https://api.example.com",
-	authStrategy: new ApiKeyStrategy("X-Custom-API-Key", "your-key"),
-});
-
-// API key as query parameter
-const api = createClient({
-	baseUrl: "https://api.example.com",
-	authStrategy: new ApiKeyStrategy("apikey", "your-key", true), // true = query param
-});
-
-// Token with auto-refresh
-const api = createClient({
-	baseUrl: "https://api.example.com",
-	authStrategy: new OpaqueTokenStrategy(
-		new LocalStoragePersist(), // Storage for tokens
-		"https://api.example.com/auth/refresh", // Refresh endpoint
-	),
-});
-
-// The strategy expects tokens in format: { access: string, refresh?: string }
-// Refresh endpoint should accept POST { token: "refresh_token" }
-// and return { access: "new_access", refresh?: "new_refresh" }
-```
-
-### Custom Authentication
+For more control, use the built-in auth helpers:
 
 ```typescript
-import { createClient, AuthStrategy } from "@cordy/endpoint-builder";
+import { createClient, bearerAuth, basicAuth, apiKeyAuth, refreshAuth } from "@cordy/endpoint-builder";
 
-class HMACAuthStrategy implements AuthStrategy {
-	async enrichRequest(req: Request): Promise<Partial<HttpHeaders>> {
-		const timestamp = Date.now().toString();
-		const signature = await this.sign(req, timestamp);
-
-		return {
-			"X-Timestamp": timestamp,
-			"X-Signature": signature,
-		};
-	}
-
-	async handleRequestError?(req: Request, res: Response): Promise<boolean> {
-		// Return true to retry the request after handling the error
-		return false;
-	}
-
-	private async sign(req: Request, timestamp: string): Promise<string> {
-		// Your HMAC signing logic here
-		return "signature";
-	}
-}
-
-// Use custom strategy
+// Bearer token (static or dynamic)
 const api = createClient({
-	baseUrl: "https://api.example.com",
-	authStrategy: new HMACAuthStrategy(),
+  baseUrl: "https://api.example.com",
+  authStrategy: bearerAuth("my-token"),
+});
+
+// Dynamic token (called on each request)
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  authStrategy: bearerAuth(() => getTokenFromStore()),
+});
+
+// Basic authentication
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  authStrategy: basicAuth("username", "password"),
+});
+
+// API key with custom header
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  authStrategy: apiKeyAuth("my-key", "X-Custom-Key"),
+});
+
+// Refresh token with auto-refresh on 401
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  authStrategy: refreshAuth({
+    getToken: () => localStorage.getItem("access_token") || "",
+    getRefreshToken: () => localStorage.getItem("refresh_token") || "",
+    refresh: async (refreshToken) => {
+      const response = await fetch("/auth/refresh", {
+        method: "POST",
+        body: JSON.stringify({ token: refreshToken }),
+      });
+      const { accessToken } = await response.json();
+      localStorage.setItem("access_token", accessToken);
+      return accessToken;
+    },
+    shouldRefresh: (response) => response.status === 401, // Optional, default is 401
+  }),
 });
 ```
 
-## Retry Strategies
+## Response Unwrapping
 
-Configure retry behavior for resilient applications:
+Many APIs wrap responses in a data envelope. Use unwrap to extract the data:
 
 ```typescript
-import {
-	createClient,
-	ExponentialRetryStrategy,
-} from "@cordy/endpoint-builder";
+// API returns { data: { id: 1, name: "John" }, meta: { timestamp: "..." } }
 
-// Simple retry configuration
 const api = createClient({
-	baseUrl: "https://api.example.com",
-	retry: true, // Uses default ExponentialRetryStrategy
+  baseUrl: "https://api.example.com",
+  unwrap: (response) => response.data, // Extract data globally
 });
 
-// Advanced retry strategy
-const api = createClient({
-	baseUrl: "https://api.example.com",
-	retryStrategy: new ExponentialRetryStrategy(
-		5, // maxAttempts (default: 3)
-		500, // base delay in ms (default: 300)
-		30000, // maxDelay in ms (default: 10000)
-	),
-});
+// Now you get the unwrapped data directly
+const user = await api
+  .get("/users/:id", { params: { id: 1 } })
+  .schema(UserSchema);
 
-// Disable retry for specific request
-const data = await api
-	.request("POST", "/critical")
-	.retry(null)
-	.timeout(5000)
-	.send();
+// user is { id: 1, name: "John" }, not wrapped
+
+// Disable unwrap for specific requests
+const fullResponse = await api
+  .get("/users/:id", { params: { id: 1 } })
+  .unwrap(false)
+  .data();
+// fullResponse is { data: {...}, meta: {...} }
 ```
 
-The default retry strategy retries on:
+## Transform Chains
 
-- Network errors (no response)
-- 5xx server errors
-- 429 Too Many Requests
+Transform validated data with type-safe chains:
 
-## Request Configuration
+```typescript
+// Extract just the email from a validated user
+const email = await api
+  .get("/users/:id", { params: { id: 1 } })
+  .schema(UserSchema)
+  .transform((user) => user.email);
+
+// Transform paginated response to array of names
+const PaginatedSchema = z.object({
+  users: z.array(z.object({ id: z.number(), name: z.string() })),
+  total: z.number(),
+});
+
+const names = await api
+  .get("/users")
+  .schema(PaginatedSchema)
+  .transform((response) => response.users.map((u) => u.name));
+// names is string[]
+```
+
+## HTTP Methods
+
+```typescript
+// GET
+const user = await api.get("/users/:id", { params: { id: 1 } }).data();
+const users = await api.get("/users", { query: { page: 1, limit: 10 } }).data();
+
+// POST
+const newUser = await api
+  .post("/users", { body: { name: "John" } })
+  .data();
+
+// PUT
+const updated = await api
+  .put("/users/:id", { params: { id: 1 }, body: { name: "Updated" } })
+  .data();
+
+// PATCH
+const patched = await api
+  .patch("/users/:id", { params: { id: 1 }, body: { name: "Patched" } })
+  .data();
+
+// DELETE
+await api.delete("/users/:id", { params: { id: 1 } }).send();
+
+// HEAD
+await api.head("/users/:id", { params: { id: 1 } }).send();
+
+// OPTIONS
+const options = await api.options("/users").data();
+```
+
+## Request Options
+
+### Query Parameters
+
+```typescript
+const users = await api.get("/users", {
+  query: {
+    page: 2,
+    limit: 20,
+    sort: "name",
+    filter: ["active", "verified"],
+  }
+}).data();
+```
+
+### Custom Headers
+
+```typescript
+// Per-request headers
+const data = await api.get("/data", {
+  headers: { "X-Request-ID": "abc123" }
+}).data();
+
+// Global default headers
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  headers: {
+    "X-Client-Version": "1.0",
+    "Accept-Language": "en-US",
+  },
+});
+```
 
 ### Timeout
 
 ```typescript
-// Global timeout in createClient
+// Global timeout
 const api = createClient({
-	baseUrl: "https://api.example.com",
-	timeout: 10000, // 10 seconds default
+  baseUrl: "https://api.example.com",
+  timeout: 10000, // 10 seconds
 });
 
-// Override timeout for specific request
-const data = await api.get("/slow-endpoint", { timeout: 30000 });
-
-// Using advanced API
-const data = await api.request("GET", "/slow-endpoint").timeout(30000).data();
+// Per-request timeout
+const data = await api.get("/slow", { timeout: 30000 }).data();
 ```
 
-### Abort Signal
+## Retry Strategy
 
 ```typescript
-const controller = new AbortController();
+import { createClient, ExponentialRetryStrategy } from "@cordy/endpoint-builder";
 
-// Using simple API
-const promise = api.get("/large-data", {
-	headers: { Accept: "application/json" },
-	timeout: 30000,
-});
-
-// Using advanced API
-const promise = api
-	.request("GET", "/large-data")
-	.signal(controller.signal)
-	.send();
-
-// Cancel request after 5 seconds
-setTimeout(() => controller.abort(), 5000);
-```
-
-### Response Types
-
-```typescript
-// Default: auto-detect based on Content-Type
-const data = await api.get("/api/data");
-
-// Force specific response type using advanced API
-const text = await api.httpClient.get("/file.txt").responseType("text").data();
-
-const blob = await api.httpClient.get("/image.jpg").responseType("blob").data();
-
-const buffer = await api.httpClient
-	.get("/binary")
-	.responseType("arraybuffer")
-	.data();
-
-const stream = await api.httpClient
-	.get("/large-file")
-	.responseType("stream")
-	.data();
-```
-
-### Request Deduplication
-
-Prevents multiple identical requests from being sent simultaneously:
-
-```typescript
-// Enable globally
+// Simple retry (uses default exponential backoff)
 const api = createClient({
-	baseUrl: "https://api.example.com",
-	dedupe: true,
+  baseUrl: "https://api.example.com",
+  retry: true,
 });
 
-// Control deduplication for specific requests using advanced API
-const data = await api.httpClient.get("/data").dedupe(true).data();
+// Custom retry strategy
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  retryStrategy: new ExponentialRetryStrategy({
+    maxAttempts: 5,
+    baseDelay: 500,
+    maxDelay: 30000,
+  }),
+});
 
-// These will return the same promise when dedupe is enabled
-const p1 = api.get("/users");
-const p2 = api.get("/users");
-// Both will resolve to the same result from a single HTTP request
+// Disable retry for specific request
+const data = await api.get("/no-retry")
+  .retry(null)
+  .data();
 ```
 
-## Storage
+## Request Deduplication
 
-The library provides pluggable storage backends for persisting data like authentication tokens:
-
-### LocalStoragePersist
-
-Uses browser's localStorage:
+Prevents duplicate concurrent requests:
 
 ```typescript
-import { LocalStoragePersist } from "@cordy/endpoint-builder";
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  dedupe: true,
+});
 
-const storage = new LocalStoragePersist();
-await storage.set("key", { data: "value" });
-const value = await storage.get("key");
-await storage.delete("key");
+// These return the same promise (single HTTP request)
+const p1 = api.get("/users").data();
+const p2 = api.get("/users").data();
+const [users1, users2] = await Promise.all([p1, p2]);
+// users1 === users2, only one HTTP request made
 ```
 
-### MemoryStoragePersist
-
-In-memory storage (data is lost on page reload):
+## Interceptors
 
 ```typescript
-import { MemoryStoragePersist } from "@cordy/endpoint-builder";
-
-const storage = new MemoryStoragePersist();
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  requestInterceptors: [
+    {
+      async onRequest(config) {
+        // Modify request before sending
+        config.headers["X-Timestamp"] = Date.now().toString();
+        return config;
+      },
+    },
+  ],
+  responseInterceptors: [
+    {
+      async onResponse(response) {
+        // Process response
+        console.log(`Response ${response.status}`);
+        return response;
+      },
+      async onError(error) {
+        // Handle errors
+        console.error("Request failed:", error.message);
+        return error;
+      },
+    },
+  ],
+});
 ```
 
-### Custom Storage
-
-Implement the `PersistStorage` interface:
+## Full Configuration
 
 ```typescript
-import { PersistStorage } from "@cordy/endpoint-builder";
+import {
+  createClient,
+  bearerAuth,
+  ExponentialRetryStrategy,
+  MemoryStoragePersist,
+} from "@cordy/endpoint-builder";
 
-class CustomStorage implements PersistStorage {
-	async get<T>(key: string): Promise<T | undefined> {
-		// Your implementation
-	}
+const api = createClient({
+  // Base URL for all requests
+  baseUrl: "https://api.example.com",
 
-	async set<T>(key: string, value: T): Promise<void> {
-		// Your implementation
-	}
+  // Default headers for all requests
+  headers: {
+    "Accept": "application/json",
+    "X-Client-Version": "1.0",
+  },
 
-	async delete(key: string): Promise<void> {
-		// Your implementation
-	}
-}
-```
+  // Authentication (simple option)
+  auth: "your-token",
+  // Or API key
+  apiKey: "your-api-key",
+  // Or custom strategy (overrides auth/apiKey)
+  authStrategy: bearerAuth(() => getToken()),
 
-## Error Handling
+  // Request timeout in milliseconds
+  timeout: 10000,
 
-The library throws detailed errors for failed requests:
+  // Enable request deduplication
+  dedupe: true,
 
-```typescript
-try {
-	const data = await api.get("/users/999");
-} catch (error) {
-	if (error.response) {
-		// Server responded with error status
-		console.error("Status:", error.status);
-		console.error("Response:", error.response.data);
-	} else if (error.config) {
-		// Request made but no response (network error)
-		console.error("Network error:", error.message);
-	} else {
-		// Request setup error
-		console.error("Error:", error.message);
-	}
-}
+  // Enable retry (uses default strategy)
+  retry: true,
+  // Or custom retry strategy
+  retryStrategy: new ExponentialRetryStrategy({
+    maxAttempts: 3,
+    baseDelay: 300,
+    maxDelay: 10000,
+  }),
+
+  // Default response type
+  responseType: "json",
+
+  // Custom storage for auth tokens
+  storage: new MemoryStoragePersist(),
+
+  // Global response unwrap function
+  unwrap: (response) => response.data,
+
+  // Request/response interceptors
+  requestInterceptors: [],
+  responseInterceptors: [],
+});
 ```
 
 ## TypeScript Support
 
-The library provides excellent TypeScript support with type inference:
+Full type inference throughout the API:
 
 ```typescript
-interface User {
-	id: number;
-	name: string;
-	email: string;
-}
+import { z } from "zod";
 
-// Response is automatically typed as User
-const user = await api.get<User>("/users/1");
-
-// Request body is type-checked
-interface CreateUserDto {
-	name: string;
-	email: string;
-}
-
-const newUser = await api.post<User>("/users", {
-	name: "John", // ✅ Type-checked
-	email: "john@example.com", // ✅ Type-checked
-	// invalid: "field" // ❌ Would cause TypeScript error
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
 });
 
-// Advanced API also supports generics
-const user = await api.httpClient.get<User>("/users/1").data();
+// Path params are inferred from URL
+api.get("/users/:id", { params: { id: 1 } }); // id is required
+api.get("/users/:id", {}); // Error: params is required
+
+// Schema output type is inferred
+const user = await api.get("/users/:id", { params: { id: 1 } })
+  .schema(UserSchema);
+// user is { id: number; name: string }
+
+// Transform output type is inferred
+const name = await api.get("/users/:id", { params: { id: 1 } })
+  .schema(UserSchema)
+  .transform((u) => u.name);
+// name is string
+
+// Safe mode result is typed
+const result = await api.get("/users/:id", { params: { id: 1 } })
+  .schema(UserSchema)
+  .safe();
+// result is { data?: { id: number; name: string }; error?: Error }
 ```
 
-## Advanced Usage
+## Legacy API
 
-### Creating a Custom API Client
-
-```typescript
-import { createClient, ApiKeyStrategy } from "@cordy/endpoint-builder";
-
-class MyApiClient {
-	private api;
-
-	constructor(private apiKey: string) {
-		this.api = createClient({
-			baseUrl: "https://api.myservice.com",
-			authStrategy: new ApiKeyStrategy("X-API-Key", apiKey),
-			headers: {
-				Accept: "application/json",
-			},
-		});
-	}
-
-	async getUsers(page = 1): Promise<User[]> {
-		return this.api.get<User[]>("/users", {
-			query: { page, limit: 20 },
-		});
-	}
-
-	async createUser(data: CreateUserDto): Promise<User> {
-		return this.api.post<User>("/users", data);
-	}
-
-	async updateUser(id: number, data: Partial<User>): Promise<User> {
-		return this.api.patch<User>(`/users/${id}`, data);
-	}
-
-	async deleteUser(id: number): Promise<void> {
-		await this.api.delete(`/users/${id}`);
-	}
-}
-```
-
-### Using with React
+The previous `UniversalClient` API is still available as `createUniversalClient`:
 
 ```typescript
-import { useEffect, useState } from "react";
-import { createClient } from "@cordy/endpoint-builder";
+import { createUniversalClient } from "@cordy/endpoint-builder";
 
-const api = createClient({
-	baseUrl: "https://api.example.com",
+const api = createUniversalClient({
+  baseUrl: "https://api.example.com",
 });
 
-function useApi<T>(path: string) {
-	const [data, setData] = useState<T | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<Error | null>(null);
+// Simple methods
+const users = await api.get("/users");
+const user = await api.post("/users", { name: "John" });
 
-	useEffect(() => {
-		const controller = new AbortController();
-
-		api.httpClient
-			.get<T>(path)
-			.signal(controller.signal)
-			.data()
-			.then(setData)
-			.catch(setError)
-			.finally(() => setLoading(false));
-
-		return () => controller.abort();
-	}, [path]);
-
-	return { data, loading, error };
-}
-
-// Usage
-function UserProfile({ userId }: { userId: number }) {
-	const { data: user, loading, error } = useApi<User>(`/users/${userId}`);
-
-	if (loading) return <div>Loading...</div>;
-	if (error) return <div>Error: {error.message}</div>;
-
-	return <div>{user?.name}</div>;
-}
+// Access underlying HttpClient
+const response = await api.httpClient.get("/users/1").data();
 ```
-
-### Using with TanStack Query
-
-Perfect integration with TanStack Query for powerful data fetching:
-
-```typescript
-import { createClient } from "@cordy/endpoint-builder";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-
-const api = createClient({
-	baseUrl: "https://api.example.com",
-	auth: "your-token",
-});
-
-// Query functions
-const userQueries = {
-	all: () => ["users"] as const,
-	lists: () => [...userQueries.all(), "list"] as const,
-	list: (filters: string) => [...userQueries.lists(), { filters }] as const,
-	details: () => [...userQueries.all(), "detail"] as const,
-	detail: (id: number) => [...userQueries.details(), id] as const,
-};
-
-// Fetch user list
-function useUsers() {
-	return useQuery({
-		queryKey: userQueries.lists(),
-		queryFn: () => api.get<User[]>("/users"),
-	});
-}
-
-// Fetch single user
-function useUser(id: number) {
-	return useQuery({
-		queryKey: userQueries.detail(id),
-		queryFn: () => api.get<User>(`/users/${id}`),
-		enabled: !!id,
-	});
-}
-
-// Create user mutation
-function useCreateUser() {
-	const queryClient = useQueryClient();
-
-	return useMutation({
-		mutationFn: (data: CreateUserDto) => api.post<User>("/users", data),
-		onSuccess: () => {
-			// Invalidate and refetch users list
-			queryClient.invalidateQueries({ queryKey: userQueries.lists() });
-		},
-	});
-}
-
-// Update user mutation
-function useUpdateUser() {
-	const queryClient = useQueryClient();
-
-	return useMutation({
-		mutationFn: ({ id, data }: { id: number; data: Partial<User> }) =>
-			api.patch<User>(`/users/${id}`, data),
-		onSuccess: (_, { id }) => {
-			// Invalidate specific user and users list
-			queryClient.invalidateQueries({ queryKey: userQueries.detail(id) });
-			queryClient.invalidateQueries({ queryKey: userQueries.lists() });
-		},
-	});
-}
-
-// Delete user mutation
-function useDeleteUser() {
-	const queryClient = useQueryClient();
-
-	return useMutation({
-		mutationFn: (id: number) => api.delete(`/users/${id}`),
-		onSuccess: () => {
-			// Invalidate users list after deletion
-			queryClient.invalidateQueries({ queryKey: userQueries.lists() });
-		},
-	});
-}
-
-// Usage in component
-function UserList() {
-	const { data: users, isLoading, error } = useUsers();
-	const createUser = useCreateUser();
-	const updateUser = useUpdateUser();
-	const deleteUser = useDeleteUser();
-
-	const handleCreate = () => {
-		createUser.mutate({
-			name: "New User",
-			email: "user@example.com",
-		});
-	};
-
-	const handleUpdate = (id: number) => {
-		updateUser.mutate({
-			id,
-			data: { name: "Updated Name" },
-		});
-	};
-
-	const handleDelete = (id: number) => {
-		deleteUser.mutate(id);
-	};
-
-	if (isLoading) return <div>Loading...</div>;
-	if (error) return <div>Error: {error.message}</div>;
-
-	return (
-		<div>
-			<button onClick={handleCreate}>Create User</button>
-			{users?.map((user) => (
-				<div key={user.id}>
-					{user.name}
-					<button onClick={() => handleUpdate(user.id)}>Update</button>
-					<button onClick={() => handleDelete(user.id)}>Delete</button>
-				</div>
-			))}
-		</div>
-	);
-}
-```
-
-## API Reference
-
-For detailed API documentation, see [API.md](./docs/API.md).
-
-For more examples, see [EXAMPLES.md](./docs/EXAMPLES.md).
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+MIT

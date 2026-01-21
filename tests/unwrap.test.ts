@@ -19,7 +19,7 @@ describe("Response Unwrapping", () => {
 
 		const client = new HttpClient({
 			baseUrl: "https://api.test.com",
-			unwrap: (response: { data: unknown }) => response.data
+			unwrap: (response) => (response as { data: unknown }).data
 		});
 
 		const user = await client.get("/users/1").data();
@@ -34,7 +34,7 @@ describe("Response Unwrapping", () => {
 
 		const client = new HttpClient({
 			baseUrl: "https://api.test.com",
-			unwrap: (response: { data: unknown }) => response.data
+			unwrap: (response) => (response as { data: unknown }).data
 		});
 
 		const full = await client.get("/users/1").unwrap(false).data();
@@ -51,7 +51,7 @@ describe("Response Unwrapping", () => {
 
 		const items = await client
 			.get("/items")
-			.unwrap((r: { items: number[] }) => r.items)
+			.unwrap((r) => (r as { items: number[] }).items)
 			.data();
 
 		expect(items).toEqual([1, 2, 3]);
@@ -74,13 +74,13 @@ describe("Response Unwrapping", () => {
 
 		const client = new HttpClient({
 			baseUrl: "https://api.test.com",
-			unwrap: (response: { data: unknown }) => response.data
+			unwrap: (response) => (response as { data: unknown }).data
 		});
 
 		// Override to get meta instead
 		const meta = await client
 			.get("/items")
-			.unwrap((r: { data: unknown; meta: unknown }) => r.meta)
+			.unwrap((r) => (r as { meta: unknown }).meta)
 			.data();
 
 		expect(meta).toEqual({ total: 100 });

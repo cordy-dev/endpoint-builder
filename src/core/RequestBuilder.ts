@@ -236,7 +236,11 @@ export class RequestBuilder<
 	schema<S extends StandardSchema>(
 		schema: S
 	): SchemaRequestBuilder<InferOutput<S>, TBody, TQuery> {
-		return new SchemaRequestBuilder(this.client, this, schema);
+		return new SchemaRequestBuilder<InferOutput<S>, TBody, TQuery>(
+			this.client,
+			this as RequestBuilder<unknown, TBody, TQuery>,
+			schema as StandardSchema<InferOutput<S>>
+		);
 	}
 }
 

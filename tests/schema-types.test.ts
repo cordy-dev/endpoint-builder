@@ -62,7 +62,7 @@ describe("Schema Types", () => {
 			expect(result.success).toBe(false);
 			if (!result.success) {
 				expect(result.issues).toHaveLength(1);
-				expect(result.issues[0].message).toBe("Invalid user");
+				expect(result.issues[0]?.message).toBe("Invalid user");
 			}
 		});
 
@@ -78,7 +78,7 @@ describe("Schema Types", () => {
 			const result = await validateWithSchema(mockAsyncSchema, 123);
 			expect(result.success).toBe(false);
 			if (!result.success) {
-				expect(result.issues[0].message).toBe("Expected string");
+				expect(result.issues[0]?.message).toBe("Expected string");
 			}
 		});
 	});

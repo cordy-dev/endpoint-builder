@@ -28,7 +28,7 @@ export interface HttpClientOptions {
   /** Response interceptors - called after each response */
   responseInterceptors?: ResponseInterceptor[];
   /** Global response unwrap function */
-  unwrap?: <T>(response: T) => unknown;
+  unwrap?: (response: unknown) => unknown;
 }
 
 /**
@@ -269,7 +269,7 @@ export class HttpClient {
 				}
 
 				// Process successful response
-				let data = await decodeResponse<T>(response, config);
+				let data: T = await decodeResponse<T>(response, config);
 
 				// Apply unwrap function if specified
 				const unwrapFn = rb._unwrap;
