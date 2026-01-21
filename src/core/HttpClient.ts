@@ -27,6 +27,8 @@ export interface HttpClientOptions {
   requestInterceptors?: RequestInterceptor[];
   /** Response interceptors - called after each response */
   responseInterceptors?: ResponseInterceptor[];
+  /** Global response unwrap function */
+  unwrap?: <T>(response: T) => unknown;
 }
 
 /**
@@ -59,6 +61,7 @@ export class HttpClient {
 			retryStrategy: new ExponentialRetryStrategy(),
 			requestInterceptors: this.requestInterceptors,
 			responseInterceptors: this.responseInterceptors,
+			unwrap: undefined,
 			...opts,
 		} as Required<HttpClientOptions>;
 	}
@@ -266,7 +269,17 @@ export class HttpClient {
 				}
 
 				// Process successful response
-				const data = await decodeResponse<T>(response, config);
+				let data = await decodeResponse<T>(response, config);
+
+				// Apply unwrap function if specified
+				const unwrapFn = rb._unwrap;
+				if (unwrapFn !== false) {
+					const effectiveUnwrap = unwrapFn ?? this.defaults.unwrap;
+					if (effectiveUnwrap) {
+						data = effectiveUnwrap(data) as T;
+					}
+				}
+
 				let result: HttpResponse<T> = {
 					data,
 					status: response.status,

@@ -33,6 +33,7 @@ export class RequestBuilder<
 	/* internal */ _signal?: AbortSignal;
 	/* internal */ _retry?: RetryStrategy | null;
 	/* internal */ _auth?: AuthStrategy | null;
+	/* internal */ _unwrap?: ((data: unknown) => unknown) | false;
 
 	constructor(private readonly client: HttpClient, readonly input: string) {
 		this._dedupe = client.defaults.dedupe;
@@ -214,6 +215,16 @@ export class RequestBuilder<
 	 */
 	retry(strategy: RetryStrategy | null): this {
 		this._retry = strategy;
+		return this;
+	}
+
+	/**
+	 * Set unwrap function or disable unwrapping for this request
+	 * @param fn - Unwrap function, or false to disable global unwrap
+	 * @returns RequestBuilder instance for chaining
+	 */
+	unwrap(fn: ((data: unknown) => unknown) | false): this {
+		this._unwrap = fn;
 		return this;
 	}
 
