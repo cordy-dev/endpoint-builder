@@ -3,10 +3,16 @@ import { vi } from "vitest";
 /**
  * Creates a mock for fetch API
  */
-export function mockFetch(responseData: any = {}, status = 200, headers = {}) {
+export function mockFetch(responseData: any = {}, status = 200, headers: Record<string, string> = {}) {
+	// Default to JSON content type for object responses
+	const defaultHeaders: Record<string, string> = {
+		"Content-Type": "application/json",
+		...headers
+	};
+
 	const response = new Response(JSON.stringify(responseData), {
 		status,
-		headers: new Headers(headers)
+		headers: new Headers(defaultHeaders)
 	});
 
 	return vi.fn().mockResolvedValue(response);

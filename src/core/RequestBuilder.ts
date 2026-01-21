@@ -1,6 +1,12 @@
 import type { AuthStrategy } from "../auth";
+import type { ApiError } from "../errors";
+import { ValidationError } from "../errors";
 import type { RetryStrategy } from "../retry/RetryStrategy";
 import type { BodyLike, HttpHeaders, HttpMethod, HttpResponse, ResponseType } from "../types";
+import type { Result } from "../types/result";
+import { err, ok } from "../types/result";
+import type { InferOutput, StandardSchema } from "../types/schema";
+import { validateWithSchema } from "../types/schema";
 import { mergeHeaders } from "../utils/mergeHeaders";
 import type { HttpClient } from "./HttpClient";
 
@@ -209,5 +215,143 @@ export class RequestBuilder<
 	retry(strategy: RetryStrategy | null): this {
 		this._retry = strategy;
 		return this;
+	}
+
+	/**
+	 * Validate response with a Standard Schema
+	 * @param schema - Standard Schema compliant schema
+	 * @returns SchemaRequestBuilder for chained validation operations
+	 */
+	schema<S extends StandardSchema>(
+		schema: S
+	): SchemaRequestBuilder<InferOutput<S>, TBody, TQuery> {
+		return new SchemaRequestBuilder(this.client, this, schema);
+	}
+}
+
+/**
+ * Request builder with schema validation
+ */
+export class SchemaRequestBuilder<
+	TResp,
+	TBody extends BodyLike = BodyLike,
+	TQuery extends Record<string, unknown> | undefined = undefined
+> {
+	constructor(
+		private readonly client: HttpClient,
+		private readonly request: RequestBuilder<unknown, TBody, TQuery>,
+		private readonly _schema: StandardSchema<TResp>
+	) {}
+
+	/**
+	 * Execute request, validate response, and return data (throws on error)
+	 */
+	async then<TResult1 = TResp, TResult2 = never>(
+		onfulfilled?: ((value: TResp) => TResult1 | PromiseLike<TResult1>) | null,
+		onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+	): Promise<TResult1 | TResult2> {
+		try {
+			const data = await this.getData();
+			return onfulfilled ? onfulfilled(data) : (data as unknown as TResult1);
+		} catch (error) {
+			if (onrejected) {
+				return onrejected(error);
+			}
+			throw error;
+		}
+	}
+
+	/**
+	 * Execute request and validate response
+	 */
+	private async getData(): Promise<TResp> {
+		const response = await this.client._execute(this.request);
+		const result = await validateWithSchema(this._schema, response.data);
+
+		if (!result.success) {
+			throw new ValidationError(result.issues, response.data);
+		}
+
+		return result.data;
+	}
+
+	/**
+	 * Execute request and return Result (never throws)
+	 */
+	async safe(): Promise<Result<TResp, ApiError>> {
+		try {
+			const data = await this.getData();
+			return ok(data);
+		} catch (error) {
+			return err(error as ApiError);
+		}
+	}
+
+	/**
+	 * Transform validated data
+	 */
+	transform<U>(fn: (data: TResp) => U): TransformRequestBuilder<U, TResp, TBody, TQuery> {
+		return new TransformRequestBuilder(this.client, this.request, this._schema, fn);
+	}
+}
+
+/**
+ * Request builder with schema validation and transform
+ */
+export class TransformRequestBuilder<
+	TResult,
+	TResp,
+	TBody extends BodyLike = BodyLike,
+	TQuery extends Record<string, unknown> | undefined = undefined
+> {
+	constructor(
+		private readonly client: HttpClient,
+		private readonly request: RequestBuilder<unknown, TBody, TQuery>,
+		private readonly _schema: StandardSchema<TResp>,
+		private readonly _transform: (data: TResp) => TResult
+	) {}
+
+	/**
+	 * Execute request, validate, transform, and return data (throws on error)
+	 */
+	async then<TResult1 = TResult, TResult2 = never>(
+		onfulfilled?: ((value: TResult) => TResult1 | PromiseLike<TResult1>) | null,
+		onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+	): Promise<TResult1 | TResult2> {
+		try {
+			const data = await this.getData();
+			return onfulfilled ? onfulfilled(data) : (data as unknown as TResult1);
+		} catch (error) {
+			if (onrejected) {
+				return onrejected(error);
+			}
+			throw error;
+		}
+	}
+
+	/**
+	 * Execute request, validate, and transform
+	 */
+	private async getData(): Promise<TResult> {
+		const response = await this.client._execute(this.request);
+		const result = await validateWithSchema(this._schema, response.data);
+
+		if (!result.success) {
+			throw new ValidationError(result.issues, response.data);
+		}
+
+		return this._transform(result.data);
+	}
+
+	/**
+	 * Execute request and return Result (never throws)
+	 */
+	async safe(): Promise<Result<TResult, ApiError>> {
+		try {
+			const data = await this.getData();
+			return ok(data);
+		} catch (error) {
+			return err(error as ApiError);
+		}
 	}
 }
