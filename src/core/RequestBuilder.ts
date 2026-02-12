@@ -26,7 +26,7 @@ export class RequestBuilder<
 	/* internal */ _method: HttpMethod = "GET";
 	/* internal */ _body?: TBody;
 	/* internal */ _headers: HttpHeaders = {};
-	/* internal */ _dedupe = true;
+	/* internal */ _dedupe!: boolean;
 	/* internal */ _query?: TQuery;
 	/* internal */ _responseType?: ResponseType;
 	/* internal */ _timeout?: number;
@@ -118,7 +118,11 @@ export class RequestBuilder<
 	 * @returns RequestBuilder instance for chaining
 	 */
 	form(data: FormData | Record<string, any>, urlencoded = true): this {
-		this.header("Content-Type", urlencoded ? "application/x-www-form-urlencoded" : "multipart/form-data");
+		if (urlencoded) {
+			this.header("Content-Type", "application/x-www-form-urlencoded");
+		}
+		// For multipart/form-data, don't set Content-Type manually.
+		// The runtime must set it automatically to include the boundary parameter.
 
 		if (data instanceof FormData) {
 			this.body(data as TBody);
@@ -164,19 +168,6 @@ export class RequestBuilder<
 	 */
 	async data(): Promise<TResp> {
 		const response = await this.client._execute<TResp, TBody, TQuery>(this);
-
-		// If response.data is a JSON string, try to parse it
-		if (typeof response.data === "string" &&
-		    (response.data.startsWith("{") || response.data.startsWith("[")) &&
-		    (response.data.endsWith("}") || response.data.endsWith("]"))) {
-			try {
-				return JSON.parse(response.data) as TResp;
-			} catch {
-				// If parsing fails, return as is
-				return response.data;
-			}
-		}
-
 		return response.data;
 	}
 

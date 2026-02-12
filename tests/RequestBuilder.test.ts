@@ -108,7 +108,7 @@ describe("RequestBuilder", () => {
 	});
 
 	describe("form method", () => {
-		it("should set FormData as request body", () => {
+		it("should set FormData as request body without explicit Content-Type", () => {
 			const builder = new RequestBuilder(client, "/users");
 			const formData = new FormData();
 			formData.append("name", "John");
@@ -117,7 +117,9 @@ describe("RequestBuilder", () => {
 			builder.form(formData, false);
 
 			expect(builder._body).toBe(formData);
-			expect(builder._headers["Content-Type"]).toBe("multipart/form-data");
+			// Content-Type should NOT be set manually for multipart/form-data,
+			// the runtime sets it automatically with the correct boundary parameter
+			expect(builder._headers["Content-Type"]).toBeUndefined();
 		});
 
 		it("should convert object to FormData", () => {

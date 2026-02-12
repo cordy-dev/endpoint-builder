@@ -1,10 +1,12 @@
 import type { AuthStrategy } from "../auth/AuthStrategy";
+import { HttpError } from "../errors/HttpError";
+import { NetworkError } from "../errors/NetworkError";
 import { ExponentialRetryStrategy } from "../retry/ExponentialRetryStrategy";
 import type { RetryContext, RetryStrategy } from "../retry/RetryStrategy";
 import { LocalStoragePersist } from "../storage/LocalStoragePersist";
 import { MemoryStoragePersist } from "../storage/MemoryStoragePersist";
 import type { PersistStorage } from "../storage/PersistStorage";
-import type { BodyLike, HttpError, HttpHeaders, HttpRequestConfig, HttpResponse, RequestInterceptor, ResponseInterceptor, ResponseType } from "../types";
+import type { BodyLike, HttpHeaders, HttpRequestConfig, HttpResponse, RequestInterceptor, ResponseInterceptor, ResponseType } from "../types";
 import { decodeResponse } from "../utils/decodeResponse";
 import { mergeHeaders } from "../utils/mergeHeaders";
 import { serializeBody } from "../utils/serializeBody";
@@ -184,6 +186,8 @@ export class HttpClient {
 		// Define the request execution function
 		const executeRequest = async (): Promise<HttpResponse<T>> => {
 			let attempt = 0;
+			let refreshAttempts = 0;
+			const MAX_REFRESH_ATTEMPTS = 2;
 
 			while (true) {
 				attempt++;
@@ -202,6 +206,7 @@ export class HttpClient {
 
 				// Execute the fetch request
 				let response: Response | undefined;
+				let networkError: Error | undefined;
 				try {
 					response = await fetch(config.url, {
 						method: config.method,
@@ -209,17 +214,40 @@ export class HttpClient {
 						body: serializeBody(config.body, config.headers ?? {}),
 						signal,
 					});
-				} catch (err) {
+				} catch (fetchErr) {
 					// Rethrow abort errors, they are intentional
-					if ((err as Error).name === "AbortError") throw err;
+					if ((fetchErr as Error).name === "AbortError") throw fetchErr;
+					networkError = fetchErr as Error;
 				} finally {
 					clearTimeout(timeoutId);
 				}
 
-				// Handle token refresh if authentication fails
-				if (response && this.defaults.auth?.handleRequestError) {
-					if (await this.defaults.auth.handleRequestError(new Request(config.url), response)) {
-						continue; // retry immediately, don't count as retry attempt
+				// Handle network errors with retry
+				if (networkError) {
+					const retryStrategy = rb._retry ?? this.defaults.retryStrategy;
+					const retryContext: RetryContext = {
+						attempt,
+						response: undefined,
+						config
+					};
+					const shouldRetry = retryStrategy?.shouldRetry(retryContext) ?? false;
+
+					if (shouldRetry) {
+						const delay = await retryStrategy!.nextDelay(retryContext);
+						await new Promise(resolve => setTimeout(resolve, delay));
+						continue;
+					}
+
+					throw new NetworkError(networkError.message, networkError);
+				}
+
+				// Handle token refresh if authentication fails (with loop protection)
+				if (response && !response.ok && this.defaults.auth?.handleRequestError) {
+					if (refreshAttempts < MAX_REFRESH_ATTEMPTS) {
+						refreshAttempts++;
+						if (await this.defaults.auth.handleRequestError(new Request(config.url), response)) {
+							continue;
+						}
 					}
 				}
 
@@ -243,29 +271,28 @@ export class HttpClient {
 
 				// Handle error responses
 				if (!response || !response.ok) {
-					let error = new Error(`HTTP ${(response && response.status) || "fetch"}`) as HttpError;
-					error.config = config;
-
-					if (response) {
-						error.status = response.status;
-						error.statusText = response.statusText;
-						error.response = {
+					const httpError = new HttpError(
+						response?.status ?? 0,
+						response?.statusText ?? "Network Error",
+						response ? {
 							data: undefined,
 							status: response.status,
 							statusText: response.statusText,
 							headers: this._respHeaders(response),
 							config,
-						};
-					}
+						} : undefined,
+						config
+					);
 
 					// Apply error interceptors
+					let interceptedError: Error = httpError;
 					for (const interceptor of this.responseInterceptors) {
 						if (interceptor.onError) {
-							error = await interceptor.onError(error);
+							interceptedError = await interceptor.onError(interceptedError as any);
 						}
 					}
 
-					throw error;
+					throw interceptedError;
 				}
 
 				// Process successful response

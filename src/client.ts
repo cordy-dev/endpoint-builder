@@ -132,6 +132,16 @@ export class TypedClient {
 		this.defaultTimeout = timeout;
 	}
 
+	private applyOptions(builder: RequestBuilder<any, any, any>, options?: { query?: QueryParams; headers?: HttpHeaders; timeout?: number }): void {
+		if (options?.query) {
+			builder.query(options.query as Record<string, unknown>);
+		}
+		if (options?.headers) {
+			builder.headers(options.headers);
+		}
+		builder.timeout(options?.timeout ?? this.defaultTimeout);
+	}
+
 	/**
 	 * Make a GET request
 	 * @returns RequestBuilder for chaining .schema(), .safe(), .data(), etc.
@@ -145,19 +155,7 @@ export class TypedClient {
 			: path;
 
 		const builder = this.httpClient.get(resolvedPath);
-
-		if (options?.query) {
-			builder.query(options.query as Record<string, unknown>);
-		}
-		if (options?.headers) {
-			builder.headers(options.headers);
-		}
-		if (options?.timeout) {
-			builder.timeout(options.timeout);
-		} else if (this.defaultTimeout) {
-			builder.timeout(this.defaultTimeout);
-		}
-
+		this.applyOptions(builder, options);
 		return builder;
 	}
 
@@ -174,22 +172,10 @@ export class TypedClient {
 			: path;
 
 		const builder = this.httpClient.post<unknown, TBody>(resolvedPath);
-
 		if (options?.body !== undefined) {
 			builder.json(options.body as object & BodyLike);
 		}
-		if (options?.query) {
-			builder.query(options.query as Record<string, unknown>);
-		}
-		if (options?.headers) {
-			builder.headers(options.headers);
-		}
-		if (options?.timeout) {
-			builder.timeout(options.timeout);
-		} else if (this.defaultTimeout) {
-			builder.timeout(this.defaultTimeout);
-		}
-
+		this.applyOptions(builder, options);
 		return builder as RequestBuilder<unknown, TBody, Record<string, unknown> | undefined>;
 	}
 
@@ -206,22 +192,10 @@ export class TypedClient {
 			: path;
 
 		const builder = this.httpClient.put<unknown, TBody>(resolvedPath);
-
 		if (options?.body !== undefined) {
 			builder.json(options.body as object & BodyLike);
 		}
-		if (options?.query) {
-			builder.query(options.query as Record<string, unknown>);
-		}
-		if (options?.headers) {
-			builder.headers(options.headers);
-		}
-		if (options?.timeout) {
-			builder.timeout(options.timeout);
-		} else if (this.defaultTimeout) {
-			builder.timeout(this.defaultTimeout);
-		}
-
+		this.applyOptions(builder, options);
 		return builder as RequestBuilder<unknown, TBody, Record<string, unknown> | undefined>;
 	}
 
@@ -238,22 +212,10 @@ export class TypedClient {
 			: path;
 
 		const builder = this.httpClient.patch<unknown, TBody>(resolvedPath);
-
 		if (options?.body !== undefined) {
 			builder.json(options.body as object & BodyLike);
 		}
-		if (options?.query) {
-			builder.query(options.query as Record<string, unknown>);
-		}
-		if (options?.headers) {
-			builder.headers(options.headers);
-		}
-		if (options?.timeout) {
-			builder.timeout(options.timeout);
-		} else if (this.defaultTimeout) {
-			builder.timeout(this.defaultTimeout);
-		}
-
+		this.applyOptions(builder, options);
 		return builder as RequestBuilder<unknown, TBody, Record<string, unknown> | undefined>;
 	}
 
@@ -270,19 +232,7 @@ export class TypedClient {
 			: path;
 
 		const builder = this.httpClient.delete(resolvedPath);
-
-		if (options?.query) {
-			builder.query(options.query as Record<string, unknown>);
-		}
-		if (options?.headers) {
-			builder.headers(options.headers);
-		}
-		if (options?.timeout) {
-			builder.timeout(options.timeout);
-		} else if (this.defaultTimeout) {
-			builder.timeout(this.defaultTimeout);
-		}
-
+		this.applyOptions(builder, options);
 		return builder;
 	}
 
@@ -299,19 +249,7 @@ export class TypedClient {
 			: path;
 
 		const builder = this.httpClient.head(resolvedPath);
-
-		if (options?.query) {
-			builder.query(options.query as Record<string, unknown>);
-		}
-		if (options?.headers) {
-			builder.headers(options.headers);
-		}
-		if (options?.timeout) {
-			builder.timeout(options.timeout);
-		} else if (this.defaultTimeout) {
-			builder.timeout(this.defaultTimeout);
-		}
-
+		this.applyOptions(builder, options);
 		return builder;
 	}
 
@@ -328,19 +266,7 @@ export class TypedClient {
 			: path;
 
 		const builder = this.httpClient.options(resolvedPath);
-
-		if (options?.query) {
-			builder.query(options.query as Record<string, unknown>);
-		}
-		if (options?.headers) {
-			builder.headers(options.headers);
-		}
-		if (options?.timeout) {
-			builder.timeout(options.timeout);
-		} else if (this.defaultTimeout) {
-			builder.timeout(this.defaultTimeout);
-		}
-
+		this.applyOptions(builder, options);
 		return builder;
 	}
 
