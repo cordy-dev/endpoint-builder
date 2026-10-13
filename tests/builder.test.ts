@@ -49,11 +49,11 @@ describe("ClientBuilder", () => {
 		expect(error?.type).toBe("http");
 	});
 
-	it("derives clients with with() and extend() without touching the parent", async () => {
+	it("derives clients with with() without touching the parent", async () => {
 		const fetch = mockFetch(json({}));
 		const root = createClient({ baseUrl: "https://api.test", fetch, headers: { "x-root": "1" } });
 		const admin = root.with({ headers: { "x-admin": "1" } });
-		const v2 = root.extend(b => b.baseUrl("https://api.test/v2").errors({ 401: Unauthorized }));
+		const v2 = root.with({ baseUrl: "https://api.test/v2", errors: { 401: Unauthorized } });
 
 		await root.get("/a");
 		await admin.get("/a");

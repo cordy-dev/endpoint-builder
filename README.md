@@ -6,8 +6,8 @@ Type-safe HTTP client for TypeScript, built on native `fetch`. It has zero depen
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 - **Typed end to end.** Path params come from the URL string. Query, body, response and error bodies come from your schemas. The API is inspired by Elysia/Eden.
-- **Any validator.** It works with [Standard Schema](https://standardschema.dev) (zod, valibot, arktype, effect, yup, …), with `parse()` objects and with plain functions.
-- **Immutable fluent builders.** The client and request builders work like .NET `IHttpClientBuilder`. Every call returns a new builder, so partially configured builders are safe to reuse.
+- **Any Standard Schema validator.** Works with [Standard Schema](https://standardschema.dev) libraries: zod, valibot, arktype, effect, yup, … Plain functions go through `schema(fn)`.
+- **Immutable, lazy requests.** A client is a plain options object (`createClient(options)`), and every request is an immutable builder. Partially configured builders are safe to reuse.
 - **Typed endpoint contracts.** Describe an API once, bind it to a client and get a typed SDK.
 - **Errors you can check.** Each failure has its own class: `HttpError<404, NotFound>`, `NetworkError`, `TimeoutError`, `AbortError`, `ValidationError` and `ParseError`. They share a `type` discriminator, and `.safe()` returns them as a `Result`.
 - **Reliable defaults:**
@@ -40,26 +40,37 @@ const created = await api.post("/users", { json: { name: "Ann" } }).returns(User
 
 Requests are **lazy**: nothing is sent until you `await` the builder or call `send()`, `safe()` or `raw()`.
 
-## Building a client
+## Creating a client
 
-Use options or the fluent builder. Both produce the same immutable `Client`.
+`createClient(options)` is the recommended way. The result is an immutable `Client`.
 
 ```ts
-import { Client, bearer } from "@cordy/endpoint-builder";
+import { bearer, createClient } from "@cordy/endpoint-builder";
 
-const api = Client.builder("https://api.example.com")
-  .header("X-App", "web")
-  .timeout(10_000)                // per attempt, default 30s
-  .auth(bearer(() => store.token))
-  .retry({ limit: 3 })            // default: 2 retries of idempotent requests
-  .errors({ 401: Unauthorized })  // typed error bodies shared by every request
-  .use(logging)                   // middleware
-  .onError(report)                // hooks: onRequest / onResponse / onError / onRetry
-  .build();
+const api = createClient({
+  baseUrl: "https://api.example.com",
+  headers: { "X-App": "web" },
+  timeout: 10_000,                // per attempt, default 30s
+  auth: bearer(() => store.token),
+  retry: { limit: 3 },            // default: 2 retries of idempotent requests
+  errors: { 401: Unauthorized },  // typed error bodies shared by every request
+  middleware: [logging],
+  onError: report,                // hooks: onRequest / onResponse / onError / onRetry
+});
 
-// derive new clients, the parent is untouched
+// derive new clients, the parent is untouched; headers merge, error types accumulate
 const admin = api.with({ headers: { "X-Role": "admin" } });
-const v2 = api.extend(b => b.baseUrl("https://api.example.com/v2"));
+const v2 = api.with({ baseUrl: "https://api.example.com/v2", errors: { 422: Problem } });
+```
+
+Prefer chaining? `Client.builder(url)` is an optional fluent alternative. Every method maps 1:1 to an option:
+
+```ts
+const api = Client.builder("https://api.example.com")
+  .timeout(10_000)
+  .auth(bearer(() => store.token))
+  .errors({ 401: Unauthorized })
+  .build();
 ```
 
 <details>
@@ -139,13 +150,23 @@ const native = await api.get("/x").raw(); // native Response, no status check
 
 ## Validation
 
-Every schema slot accepts:
-
-- any **Standard Schema**: zod ≥ 3.24, valibot ≥ 1, arktype ≥ 2, effect/schema, yup ≥ 1.7, …
-- an object with **`parse(value)`**
-- a **function** `(value) => output` that throws when the value is invalid
+Every schema slot takes a **[Standard Schema](https://standardschema.dev)**: zod ≥ 3.24, valibot ≥ 1, arktype ≥ 2, effect/schema, yup ≥ 1.7, …
 
 The input type is inferred from the schema input and the data type from the schema output, so transforms and coercions are typed correctly. Sync validators run synchronously, without an extra await.
+
+For a one-off check, wrap a function with `schema(fn)`. Throw to reject; the message becomes the validation issue:
+
+```ts
+import { schema } from "@cordy/endpoint-builder";
+
+const Even = schema((value) => {
+  if (typeof value !== "number" || value % 2) throw new Error("expected an even number");
+  return value;
+});
+api.get("/count").returns(Even);  // number
+```
+
+The input type of `schema(fn)` is `unknown`. Use a schema library when you need a typed `body` or `query`.
 
 ## Typed endpoint contracts
 

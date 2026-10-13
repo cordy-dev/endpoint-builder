@@ -2,7 +2,7 @@ import * as v from "valibot";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 
-import { type ApiError, createClient, defineContract, endpoint, type EndpointInput, HttpError, isHttpError, ValidationError } from "../src";
+import { type ApiError, createClient, defineContract, type Endpoint, endpoint, type EndpointInput, HttpError, isHttpError, ValidationError } from "../src";
 import { json, mockFetch, readBody } from "./helpers";
 
 const User = z.object({ id: z.number(), name: z.string() });
@@ -125,5 +125,21 @@ describe("contracts", () => {
 		const fetch = mockFetch(json({}, { status: 409 }));
 		const api = createClient({ baseUrl: "https://api.test", fetch }).api(contract);
 		await expect(api.users.remove({ params: { id: 1 } })).rejects.toBeInstanceOf(HttpError);
+	});
+});
+
+describe("Endpoint spec generic", () => {
+	it("exposes one readable spec instead of positional generics", () => {
+		type Spec = (typeof contract.users.get)["~spec"];
+		expectTypeOf<Spec["method"]>().toEqualTypeOf<"GET">();
+		expectTypeOf<Spec["path"]>().toEqualTypeOf<"/users/:id">();
+		expectTypeOf<Spec["data"]>().toEqualTypeOf<{ id: number; name: string }>();
+		expectTypeOf<Spec["errors"]>().toEqualTypeOf<{ 404: { message: string } }>();
+	});
+
+	it("accepts any endpoint through Endpoint<any>", () => {
+		const name = <E extends Endpoint<any>>(e: E) => e.definition.path;
+		expect(name(contract.users.get)).toBe("/users/:id");
+		expect(name(contract.users.create)).toBe("/users");
 	});
 });

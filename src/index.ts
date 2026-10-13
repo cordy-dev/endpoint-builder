@@ -47,8 +47,8 @@ export type { Result } from "./result";
 export { err, isErr, isOk, mapError, mapResult, ok, unwrap, unwrapOr } from "./result";
 
 // Schema
-export type { InferInput, InferOutput, Issue, ParserLike, Schema, StandardSchemaV1, ValidationOutcome, ValidatorFn } from "./schema";
-export { isStandardSchema, validate } from "./schema";
+export type { InferInput, InferOutput, Issue, Schema, StandardSchemaV1, ValidationOutcome } from "./schema";
+export { isStandardSchema, schema, validate } from "./schema";
 
 // Utilities
 export type {

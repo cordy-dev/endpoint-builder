@@ -6,7 +6,7 @@ A full redesign. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide and [d
 
 ### Added
 
-- Immutable `ClientBuilder`, plus `client.with()` and `client.extend()` for derived clients.
+- Immutable `Client` created with `createClient(options)`, and `client.with(options)` for derived clients. `Client.builder()` is an optional fluent alternative.
 - Immutable, lazy, thenable `RequestBuilder` with:
   - `.returns()`, `.as<T>()` and `.map()`;
   - `.errors()`, `.json(value, schema)` and `.query(value, schema)`;
@@ -16,7 +16,8 @@ A full redesign. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide and [d
   - `.meta()` and `.init()`.
 - Typed endpoint contracts: `endpoint.get(...)`, `defineContract()` and `client.api(contract)`.
 - Typed error bodies per status code at client and request level. `isHttpError(error, status)` narrows the body to the declared type.
-- Validators: Standard Schema v1, `parse()` objects and plain functions. Validation covers params, query, body, response and error bodies.
+- Validation with any Standard Schema v1 library (zod, valibot, arktype, effect, yup) for params, query, body, response and error bodies. `schema(fn)` wraps a plain function.
+- `Endpoint` takes a single spec generic: `Endpoint<{ method; path; params; query; body; data; errors }>`.
 - Error classes: `TimeoutError`, `AbortError`, `ParseError` and the `EndpointError` base class. All errors carry a `type` discriminator.
 - Middleware pipeline and lifecycle hooks: `onRequest`, `onResponse`, `onError` and `onRetry`.
 - Path params: optional params (`:id?`), OpenAPI style (`{id}`) and `:name.json`. Values are URI-encoded.

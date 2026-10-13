@@ -2,38 +2,17 @@ import type { StandardSchemaV1 } from "./standard";
 
 export type { StandardSchemaV1 } from "./standard";
 
-/** Anything exposing a `parse(value)` method that throws on invalid input (zod, superstruct-like, custom). */
-export interface ParserLike<Output = unknown> {
-	parse(value: unknown): Output;
-}
-
-/** Plain validator function: returns the (possibly transformed) value or throws. */
-export type ValidatorFn<Input = unknown, Output = Input> = (value: Input) => Output | Promise<Output>;
-
 /**
- * Any supported validator:
- * - a Standard Schema (zod, valibot, arktype, effect, yup, ...)
- * - an object with `parse(value)`
- * - a function `(value) => output` that throws on invalid input
+ * Any [Standard Schema](https://standardschema.dev) v1 validator:
+ * zod, valibot, arktype, effect/schema, yup, ... Wrap plain functions with `schema(fn)`.
  */
-export type Schema<Input = any, Output = any> =
-	| StandardSchemaV1<Input, Output>
-	| ParserLike<Output>
-	| ValidatorFn<Input, Output>;
+export type Schema<Input = any, Output = any> = StandardSchemaV1<Input, Output>;
 
 /** Infer the type a schema accepts. */
-export type InferInput<S> =
-	S extends StandardSchemaV1<infer I, any> ? I
-		: S extends ParserLike<infer O> ? O
-			: S extends (value: infer I) => any ? I
-				: unknown;
+export type InferInput<S> = S extends StandardSchemaV1<infer I, any> ? I : unknown;
 
 /** Infer the type a schema produces. */
-export type InferOutput<S> =
-	S extends StandardSchemaV1<any, infer O> ? O
-		: S extends ParserLike<infer O> ? O
-			: S extends (value: any) => infer R ? Awaited<R>
-				: unknown;
+export type InferOutput<S> = S extends StandardSchemaV1<any, infer O> ? O : unknown;
 
 export type Issue = StandardSchemaV1.Issue;
 
@@ -59,6 +38,38 @@ function issuesFromThrown(error: unknown): readonly Issue[] {
 	return [{ message: error instanceof Error ? error.message : String(error) }];
 }
 
+/**
+ * Turn a plain function into a Standard Schema. Throw to reject a value;
+ * the thrown message becomes the validation issue. Async functions are supported.
+ *
+ * ```ts
+ * api.get("/count").returns(schema(v => { if (typeof v !== "number") throw new Error("expected a number"); return v * 2; }))
+ * ```
+ *
+ * The input type is `unknown`; use zod, valibot, arktype, ... when you need a typed `body` or `query`.
+ */
+export function schema<Output>(fn: (value: unknown) => Output | Promise<Output>): StandardSchemaV1<unknown, Output> {
+	return {
+		"~standard": {
+			version: 1,
+			vendor: "endpoint-builder",
+			validate(value) {
+				try {
+					const output = fn(value);
+					return output instanceof Promise
+						? output.then(
+							(v): StandardSchemaV1.Result<Output> => ({ value: v }),
+							(e: unknown): StandardSchemaV1.Result<Output> => ({ issues: issuesFromThrown(e) }),
+						)
+						: { value: output };
+				} catch (error) {
+					return { issues: issuesFromThrown(error) };
+				}
+			},
+		},
+	};
+}
+
 function fromStandardResult<T>(result: StandardSchemaV1.Result<T>): ValidationOutcome<T> {
 	return result.issues
 		? { success: false, issues: result.issues }
@@ -66,27 +77,22 @@ function fromStandardResult<T>(result: StandardSchemaV1.Result<T>): ValidationOu
 }
 
 /**
- * Run any supported schema against a value.
+ * Run a Standard Schema against a value.
  * Stays synchronous for synchronous validators (no extra microtask) and never throws.
  */
 export function validate<T>(schema: Schema<unknown, T>, value: unknown): ValidationOutcome<T> | Promise<ValidationOutcome<T>> {
+	if (!isStandardSchema(schema)) {
+		return {
+			success: false,
+			issues: [{ message: "Not a Standard Schema. Use zod, valibot, arktype, ... or wrap a function with schema(fn)." }],
+		};
+	}
 	try {
-		if (isStandardSchema(schema)) {
-			const result = (schema)["~standard"].validate(value);
-			return result instanceof Promise ? result.then(fromStandardResult) : fromStandardResult(result);
+		const result = schema["~standard"].validate(value);
+		if (result instanceof Promise) {
+			return result.then(fromStandardResult, (e: unknown) => ({ success: false as const, issues: issuesFromThrown(e), cause: e }));
 		}
-
-		const output = typeof schema === "function"
-			? schema(value)
-			: schema.parse(value);
-
-		if (output instanceof Promise) {
-			return output.then(
-				(v: T) => ({ success: true as const, value: v }),
-				(e: unknown) => ({ success: false as const, issues: issuesFromThrown(e), cause: e }),
-			);
-		}
-		return { success: true, value: output };
+		return fromStandardResult(result);
 	} catch (error) {
 		return { success: false, issues: issuesFromThrown(error), cause: error };
 	}

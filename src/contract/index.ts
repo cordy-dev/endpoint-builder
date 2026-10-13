@@ -32,24 +32,44 @@ export interface EndpointDefinition {
 }
 
 /**
+ * Type-level description of an endpoint — the single generic of `Endpoint`.
+ * `Unset` in `params` / `query` / `body` means "no schema declared".
+ */
+export interface EndpointSpec {
+	method: HttpMethod;
+	path: string;
+	params: unknown;
+	query: unknown;
+	body: unknown;
+	data: unknown;
+	errors: ErrorMap;
+}
+
+type Initial<M extends HttpMethod, P extends string> = {
+	method: M;
+	path: P;
+	params: Unset;
+	query: Unset;
+	body: Unset;
+	data: unknown;
+	errors: {};
+};
+
+/** Replace some fields of a spec, keeping the rest (and a readable hover) */
+type Patch<S, P> = { [K in keyof S]: K extends keyof P ? P[K] : S[K] };
+
+/**
  * Immutable endpoint definition — the contract of a single route.
  * Inspired by Elysia route schemas: types for params, query, body, response and
  * error bodies all flow from the declared schemas.
  *
  * ```ts
  * const getUser = endpoint.get("/users/:id").returns(User).errors({ 404: NotFound });
+ * //    ^? Endpoint<{ method: "GET"; path: "/users/:id"; data: User; errors: { 404: NotFound }; ... }>
  * ```
  */
-export class Endpoint<
-	TMethod extends HttpMethod = HttpMethod,
-	TPath extends string = string,
-	TParams = Unset,
-	TQuery = Unset,
-	TBody = Unset,
-	TData = unknown,
-	TErrors extends ErrorMap = {},
-> {
-	declare readonly "~types": { method: TMethod; path: TPath; params: TParams; query: TQuery; body: TBody; data: TData; errors: TErrors };
+export class Endpoint<S extends EndpointSpec = EndpointSpec> {
+	declare readonly "~spec": S;
 
 	constructor(readonly definition: EndpointDefinition) {}
 
@@ -58,66 +78,66 @@ export class Endpoint<
 	}
 
 	/** Validate / coerce path params (the input type comes from the schema) */
-	params<S extends Schema>(schema: S): Endpoint<TMethod, TPath, S, TQuery, TBody, TData, TErrors> {
+	params<Sc extends Schema>(schema: Sc): Endpoint<Patch<S, { params: Sc }>> {
 		return this.#with({ paramsSchema: schema });
 	}
 
 	/** Validate query parameters */
-	query<S extends Schema>(schema: S): Endpoint<TMethod, TPath, TParams, S, TBody, TData, TErrors> {
+	query<Sc extends Schema>(schema: Sc): Endpoint<Patch<S, { query: Sc }>> {
 		return this.#with({ querySchema: schema });
 	}
 
 	/** Validate the request body (sent as JSON unless it is a native body) */
-	body<S extends Schema>(schema: S, kind: "auto" | "json" | "form" | "multipart" = "auto"): Endpoint<TMethod, TPath, TParams, TQuery, S, TData, TErrors> {
+	body<Sc extends Schema>(schema: Sc, kind: "auto" | "json" | "form" | "multipart" = "auto"): Endpoint<Patch<S, { body: Sc }>> {
 		return this.#with({ bodySchema: schema, bodyKind: kind });
 	}
 
 	/** Validate the response; the data type is inferred from the schema */
-	returns<S extends Schema>(schema: S): Endpoint<TMethod, TPath, TParams, TQuery, TBody, InferOutput<S>, TErrors> {
+	returns<Sc extends Schema>(schema: Sc): Endpoint<Patch<S, { data: InferOutput<Sc> }>> {
 		return this.#with({ responseSchema: schema });
 	}
 
 	/** Declare the response type without runtime validation */
-	as<T>(): Endpoint<TMethod, TPath, TParams, TQuery, TBody, T, TErrors> {
-		return this as unknown as Endpoint<TMethod, TPath, TParams, TQuery, TBody, T, TErrors>;
+	as<T>(): Endpoint<Patch<S, { data: T }>> {
+		return this as unknown as Endpoint<Patch<S, { data: T }>>;
 	}
 
 	/** Declare typed error bodies by status code */
-	errors<M extends ErrorSchemas>(schemas: M): Endpoint<TMethod, TPath, TParams, TQuery, TBody, TData, MergeErrors<TErrors, InferErrors<M>>> {
+	errors<M extends ErrorSchemas>(schemas: M): Endpoint<Patch<S, { errors: MergeErrors<S["errors"], InferErrors<M>> }>> {
 		return this.#with({ errorSchemas: { ...this.definition.errorSchemas, ...schemas } });
 	}
 
-	responseType(type: ResponseType): Endpoint<TMethod, TPath, TParams, TQuery, TBody, TData, TErrors> {
+	responseType(type: ResponseType): this {
 		return this.#with({ responseType: type });
 	}
 
-	headers(headers: HeadersInput): Endpoint<TMethod, TPath, TParams, TQuery, TBody, TData, TErrors> {
+	headers(headers: HeadersInput): this {
 		return this.#with({ headers: [...(this.definition.headers ?? []), headers] });
 	}
 
-	timeout(ms: number | false): Endpoint<TMethod, TPath, TParams, TQuery, TBody, TData, TErrors> {
+	timeout(ms: number | false): this {
 		return this.#with({ timeout: ms });
 	}
 
-	retry(retry: RetryInput): Endpoint<TMethod, TPath, TParams, TQuery, TBody, TData, TErrors> {
+	retry(retry: RetryInput): this {
 		return this.#with({ retry });
 	}
 
-	auth(auth: AuthStrategy | false): Endpoint<TMethod, TPath, TParams, TQuery, TBody, TData, TErrors> {
+	auth(auth: AuthStrategy | false): this {
 		return this.#with({ auth });
 	}
 
-	dedupe(enabled = true): Endpoint<TMethod, TPath, TParams, TQuery, TBody, TData, TErrors> {
+	dedupe(enabled = true): this {
 		return this.#with({ dedupe: enabled });
 	}
 
-	meta(key: string, value: unknown): Endpoint<TMethod, TPath, TParams, TQuery, TBody, TData, TErrors> {
+	meta(key: string, value: unknown): this {
 		return this.#with({ meta: { ...this.definition.meta, [key]: value } });
 	}
 }
 
 function define<M extends HttpMethod>(method: M) {
-	return <P extends string>(path: P): Endpoint<M, P> => new Endpoint({ method, path });
+	return <P extends string>(path: P): Endpoint<Initial<M, P>> => new Endpoint({ method, path });
 }
 
 /** Endpoint factory: `endpoint.get("/users/:id")`, `endpoint.post("/users")`, ... */
@@ -157,15 +177,15 @@ interface CommonInput {
 }
 
 /** Input object accepted by a bound endpoint */
-export type EndpointInput<E> = E extends Endpoint<infer M, infer P, infer TP, infer TQ, infer TB, any, any>
-	? Simplify<ParamsPart<P, TP> & QueryPart<TQ> & BodyPart<M, TB> & CommonInput>
+export type EndpointInput<E> = E extends Endpoint<infer S>
+	? Simplify<ParamsPart<S["path"], S["params"]> & QueryPart<S["query"]> & BodyPart<S["method"], S["body"]> & CommonInput>
 	: never;
 
 /** Response data of an endpoint */
-export type EndpointData<E> = E extends Endpoint<any, any, any, any, any, infer D, any> ? D : never;
+export type EndpointData<E> = E extends Endpoint<infer S> ? S["data"] : never;
 
 /** Declared error bodies of an endpoint */
-export type EndpointErrors<E> = E extends Endpoint<any, any, any, any, any, any, infer TE> ? TE : never;
+export type EndpointErrors<E> = E extends Endpoint<infer S> ? S["errors"] : never;
 
 /** Callable produced by binding an endpoint to a client */
 export type EndpointFn<E, TClientErrors extends ErrorMap> = {} extends EndpointInput<E>
@@ -174,12 +194,12 @@ export type EndpointFn<E, TClientErrors extends ErrorMap> = {} extends EndpointI
 
 /** Nested object of endpoints */
 export interface Contract {
-	readonly [key: string]: Endpoint<any, any, any, any, any, any, any> | Contract;
+	readonly [key: string]: Endpoint<any> | Contract;
 }
 
 /** A contract bound to a client: every endpoint becomes a typed function */
 export type BoundContract<C, TClientErrors extends ErrorMap = {}> = {
-	readonly [K in keyof C]: C[K] extends Endpoint<any, any, any, any, any, any, any>
+	readonly [K in keyof C]: C[K] extends Endpoint<any>
 		? EndpointFn<C[K], TClientErrors>
 		: BoundContract<C[K], TClientErrors>;
 };

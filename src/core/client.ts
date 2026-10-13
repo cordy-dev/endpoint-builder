@@ -115,7 +115,7 @@ function applyOptions(base: ClientConfig, options: ClientOptions): ClientConfig 
 // ------------------------------------------------------------------ builder
 
 /**
- * Fluent, immutable client builder (in the spirit of .NET `IHttpClientBuilder`).
+ * Optional fluent alternative to `createClient(options)`: every method maps 1:1 to an option.
  * Each call returns a new builder; error schemas accumulate in the type.
  *
  * ```ts
@@ -262,7 +262,7 @@ export type BodyOptions<P extends string> = BodyRequestOptions & ParamsOption<P>
 type Args<P extends string, O> = HasRequiredParams<P> extends true ? [options: O] : [options?: O];
 
 /**
- * Configured HTTP client. Immutable: `with()` / `extend()` derive new clients.
+ * Configured HTTP client. Immutable: `with()` derives a new client, the parent is untouched.
  * The middleware pipeline is composed once, at construction time.
  */
 export class Client<TErrors extends ErrorMap = {}> {
@@ -276,7 +276,7 @@ export class Client<TErrors extends ErrorMap = {}> {
 		this.#core = { config, pipeline: compose(layers, createTransport(config.fetch)) };
 	}
 
-	/** Start a fluent builder */
+	/** Start the optional fluent builder (`createClient(options)` is the recommended way) */
 	static builder(baseUrl?: string): ClientBuilder {
 		const builder = new ClientBuilder();
 		return baseUrl === undefined ? builder : builder.baseUrl(baseUrl);
@@ -347,19 +347,9 @@ export class Client<TErrors extends ErrorMap = {}> {
 		return bindContract(this.#core, contract) as BoundContract<C, TErrors>;
 	}
 
-	/** Derive a client with extra options */
+	/** Derive a client with extra options (headers merge, error schemas accumulate in the type) */
 	with<O extends ClientOptions>(options: O): Client<MergeErrors<TErrors, ErrorsOf<O>>> {
 		return new Client(applyOptions(this.#core.config, options));
-	}
-
-	/** Derive a client through the fluent builder */
-	extend<E extends ErrorMap>(configure: (builder: ClientBuilder<TErrors>) => ClientBuilder<E>): Client<E> {
-		return configure(new ClientBuilder<TErrors>(this.#core.config)).build();
-	}
-
-	/** Builder pre-filled with this client's configuration */
-	toBuilder(): ClientBuilder<TErrors> {
-		return new ClientBuilder<TErrors>(this.#core.config);
 	}
 }
 

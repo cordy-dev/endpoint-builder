@@ -2,7 +2,7 @@ import * as v from "valibot";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 
-import { buildPath, createQuerySerializer, type InferInput, type InferOutput, path, type PathParams, validate } from "../src";
+import { buildPath, createQuerySerializer, type InferInput, type InferOutput, path, type PathParams, schema, validate } from "../src";
 
 type P = string | number | bigint | boolean;
 
@@ -55,18 +55,16 @@ describe("query serializer", () => {
 });
 
 describe("validators", () => {
-	it("supports zod, valibot, parse() objects and plain functions", async () => {
+	it("supports zod, valibot and schema(fn)", async () => {
 		const zodSchema = z.object({ n: z.coerce.number() });
 		const valibotSchema = v.object({ n: v.number() });
-		const parser = { parse: (value: unknown) => value as { n: number } };
-		const fn = (value: unknown) => {
+		const fn = schema((value) => {
 			if (typeof value !== "number") throw new Error("not a number");
 			return value * 2;
-		};
+		});
 
 		expect(await validate(zodSchema, { n: "1" })).toEqual({ success: true, value: { n: 1 } });
 		expect(await validate(valibotSchema, { n: 1 })).toEqual({ success: true, value: { n: 1 } });
-		expect(await validate(parser, { n: 1 })).toEqual({ success: true, value: { n: 1 } });
 		expect(await validate(fn, 2)).toEqual({ success: true, value: 4 });
 		expect(await validate(fn, "x")).toMatchObject({ success: false, issues: [{ message: "not a number" }] });
 
@@ -74,22 +72,37 @@ describe("validators", () => {
 		expectTypeOf<InferInput<typeof zodSchema>>().toEqualTypeOf<{ n: unknown }>();
 		expectTypeOf<InferOutput<typeof valibotSchema>>().toEqualTypeOf<{ n: number }>();
 		expectTypeOf<InferOutput<typeof fn>>().toEqualTypeOf<number>();
+		expectTypeOf<InferInput<typeof fn>>().toEqualTypeOf<unknown>();
+	});
+
+	it("schema(fn) keeps zod-like issues from thrown errors", async () => {
+		const parse = schema((value) => z.object({ id: z.number() }).parse(value));
+		const outcome = await validate(parse, { id: "1" });
+		expect(outcome).toMatchObject({ success: false, issues: [{ path: ["id"] }] });
 	});
 
 	it("handles async validators", async () => {
 		const asyncSchema = z.string().refine(async s => s.length > 1);
 		expect(await validate(asyncSchema, "ab")).toEqual({ success: true, value: "ab" });
 		expect((await validate(asyncSchema, "a")).success).toBe(false);
-		const asyncFn = async (value: unknown) => {
+		const asyncFn = schema(async (value) => {
 			await Promise.resolve();
 			if (value !== "ok") throw new Error("bad");
 			return value;
-		};
+		});
+		expect((await validate(asyncFn, "ok")).success).toBe(true);
 		expect((await validate(asyncFn, "no")).success).toBe(false);
 	});
 
 	it("validates synchronously when possible", () => {
-		const result = validate(z.string(), "sync");
-		expect(result).not.toBeInstanceOf(Promise);
+		expect(validate(z.string(), "sync")).not.toBeInstanceOf(Promise);
+		expect(validate(schema(v => String(v)), 1)).not.toBeInstanceOf(Promise);
+	});
+
+	it("rejects bare functions with a hint (they are no longer accepted)", async () => {
+		const bare = (value: unknown) => value;
+		// @ts-expect-error wrap functions with schema(fn)
+		const outcome = await validate(bare, 1);
+		expect(outcome).toMatchObject({ success: false, issues: [{ message: expect.stringContaining("schema(fn)") }] });
 	});
 });
