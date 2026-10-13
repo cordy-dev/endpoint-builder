@@ -1,84 +1,70 @@
-// ========================================
-// TYPED API (RECOMMENDED)
-// ========================================
+// Client
+export type { BodyOptions, ClientOptions, RequestOptions } from "./core/client";
+export { Client, ClientBuilder, createClient } from "./core/client";
+export type { ClientConfig, Hooks, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, Unwrap } from "./core/config";
+export type { ErrorSchemas, InferErrors, MergeErrors } from "./core/request";
+export { RequestBuilder } from "./core/request";
 
-export type { TypedClientOptions, TypedRequestOptions } from "./client";
-export { createClient, TypedClient } from "./client";
+// Contracts
+export type {
+	BoundContract,
+	Contract,
+	EndpointData,
+	EndpointErrors,
+	EndpointFn,
+	EndpointInput,
+} from "./contract";
+export { defineContract, Endpoint, endpoint } from "./contract";
 
-// ========================================
-// LEGACY UNIVERSAL API
-// ========================================
+// Auth
+export type { ApiKeyOptions, Credential, RefreshableOptions } from "./auth";
+export { apiKey, basic, bearer, refreshable } from "./auth";
+export type { AuthStrategy } from "./auth/types";
 
-export type { UniversalClientOptions } from "./simple";
-export { createClient as createUniversalClient, UniversalClient } from "./simple";
+// Retry
+export type { Backoff, RetryInput, RetryOptions, RetryState } from "./retry";
+export { computeDelay, IDEMPOTENT_METHODS, RETRY_STATUS_CODES } from "./retry";
 
-// ========================================
-// DIRECT ACCESS TO CLASSES (ADVANCED)
-// ========================================
-
-// Core
-export type { HttpClientOptions } from "./core/HttpClient";
-export { HttpClient } from "./core/HttpClient";
-export { RequestBuilder, SchemaRequestBuilder, TransformRequestBuilder } from "./core/RequestBuilder";
-
-// Authentication
-export { ApiKeyStrategy } from "./auth/ApiKeyStrategy";
-export type { AuthStrategy } from "./auth/AuthStrategy";
-export type { RefreshAuthOptions } from "./auth/helpers";
-export { apiKeyAuth, basicAuth, bearerAuth, refreshAuth } from "./auth/helpers";
-export { OpaqueTokenStrategy } from "./auth/OpaqueTokenStrategy";
+// Middleware
+export type { Middleware, Next } from "./middleware";
+export { compose } from "./middleware";
 
 // Errors
-export type { ApiError } from "./errors";
-export { HttpError, NetworkError,ValidationError } from "./errors";
+export type { ApiError, DeclaredHttpError, ErrorMap, ErrorRequest, ErrorType, ValidationStage } from "./errors";
+export {
+	AbortError,
+	EndpointError,
+	HttpError,
+	isHttpError,
+	NetworkError,
+	ParseError,
+	TimeoutError,
+	ValidationError,
+} from "./errors";
 
-// Retry Strategies
-export { ExponentialRetryStrategy } from "./retry/ExponentialRetryStrategy";
-export { ExponentialRetryStrategy as JitteredExponentialBackoffRetryStrategy } from "./retry/ExponentialRetryStrategy";
-export type { RetryContext, RetryStrategy } from "./retry/RetryStrategy";
+// Result
+export type { Result } from "./result";
+export { err, isErr, isOk, mapError, mapResult, ok, unwrap, unwrapOr } from "./result";
 
-// Storage
-export { LocalStoragePersist } from "./storage/LocalStoragePersist";
-export { MemoryStoragePersist } from "./storage/MemoryStoragePersist";
-export type { PersistStorage } from "./storage/PersistStorage";
+// Schema
+export type { InferInput, InferOutput, Issue, ParserLike, Schema, StandardSchemaV1, ValidationOutcome, ValidatorFn } from "./schema";
+export { isStandardSchema, validate } from "./schema";
 
-// Types
+// Utilities
 export type {
-	BodyLike,
-	HttpError as HttpErrorType,
-	HttpHeaders,
+	FetchLike,
+	HeadersInput,
 	HttpMethod,
-	HttpRequestConfig,
 	HttpResponse,
-	QueryParams,
-	RequestInterceptor,
-	ResponseInterceptor,
-	ResponseType
+	QueryInput,
+	QueryObject,
+	QueryValue,
+	RequestContext,
+	RequestInitExtras,
+	ResponseType,
 } from "./types";
-
-// Schema Types
-export type {
-	InferOutput,
-	StandardSchema,
-	StandardSchemaIssue,
-	StandardSchemaProps,
-	StandardSchemaResult,
-	ValidationResult
-} from "./types/schema";
-export { validateWithSchema } from "./types/schema";
-
-// Path Parameter Types
-export type {
-	ExtractParamNames,
-	ExtractPathParams,
-	HasPathParams
-} from "./types/path-params";
-export { buildPath } from "./types/path-params";
-
-// Result Types
-export type { Result } from "./types/result";
-export { err, isErr, isOk, ok, unwrapResult } from "./types/result";
-
-// Backward compatibility exports
-export type { UniversalClientOptions as SimpleClientOptions } from "./simple";
-export { UniversalClient as SimpleClient } from "./simple";
+export type { FormInput, FormValue } from "./utils/body";
+export type { HasParams, HasRequiredParams, ParamNames, PathParams, PathParamValue } from "./utils/path";
+export { buildPath, path } from "./utils/path";
+export type { ArrayFormat, QuerySerializer, QuerySerializerOptions } from "./utils/query";
+export { createQuerySerializer } from "./utils/query";

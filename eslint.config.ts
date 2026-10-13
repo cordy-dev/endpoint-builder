@@ -61,9 +61,21 @@ export default tseslint.config(
 			"@typescript-eslint/no-unsafe-call": "off",
 			"no-unused-vars": "off",
 			"@typescript-eslint/no-unused-vars": "off",
-			"@typescript-eslint/no-misused-promises": "off"
+			"@typescript-eslint/no-misused-promises": "off",
+			// `{}` is the idiomatic "empty map" for accumulated generic types
+			"@typescript-eslint/no-empty-object-type": "off"
 
 		}
+	},
+
+	// 5. Tests: async stubs and fake rejections are fine
+	{
+		files: ["tests/**/*.ts"],
+		rules: {
+			"@typescript-eslint/require-await": "off",
+			"@typescript-eslint/no-base-to-string": "off",
+			"@typescript-eslint/prefer-promise-reject-errors": "off",
+		},
 	},
 
 	// 6. Special import groups for src/**

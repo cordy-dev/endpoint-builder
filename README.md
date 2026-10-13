@@ -1,547 +1,279 @@
 # endpoint-builder
 
-A modern, type-safe HTTP client for TypeScript with runtime validation. Built on the native Fetch API with zero dependencies.
+Type-safe HTTP client for TypeScript, built on native `fetch`. It has zero dependencies.
 
 [![npm version](https://img.shields.io/npm/v/@cordy/endpoint-builder.svg)](https://www.npmjs.com/package/@cordy/endpoint-builder)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 
-## Features
-
-- **Type-Safe Path Parameters** - Auto-extract params from URL strings like `/users/:id`
-- **Runtime Validation** - Validate responses with Standard Schema (zod, valibot, arktype)
-- **Safe Mode** - Rust-inspired Result type with `.safe()` for error handling
-- **Auth Helpers** - Built-in helpers for Bearer, API Key, Basic, and Refresh Token auth
-- **Response Unwrapping** - Global and per-request unwrap for wrapped API responses
-- **Transform Chains** - Type-safe data transformations after validation
-- **Smart Retries** - Configurable exponential backoff with jitter
-- **Request Deduplication** - Automatic deduplication of identical requests
-- **Zero Dependencies** - Built on native Fetch API
-
-## Installation
+- **Typed end to end.** Path params come from the URL string. Query, body, response and error bodies come from your schemas. The API is inspired by Elysia/Eden.
+- **Any validator.** It works with [Standard Schema](https://standardschema.dev) (zod, valibot, arktype, effect, yup, …), with `parse()` objects and with plain functions.
+- **Immutable fluent builders.** The client and request builders work like .NET `IHttpClientBuilder`. Every call returns a new builder, so partially configured builders are safe to reuse.
+- **Typed endpoint contracts.** Describe an API once, bind it to a client and get a typed SDK.
+- **Errors you can check.** Each failure has its own class: `HttpError<404, NotFound>`, `NetworkError`, `TimeoutError`, `AbortError`, `ValidationError` and `ParseError`. They share a `type` discriminator, and `.safe()` returns them as a `Result`.
+- **Reliable defaults:**
+  - Per-attempt timeouts that also cover a slow body.
+  - Retries only idempotent methods by default, with backoff, jitter and `Retry-After`.
+  - Single-flight token refresh that can't loop.
+  - Dedupe keeps each caller's abort separate.
+  - Connections are released for discarded bodies.
+- **Middleware pipeline** in the style of `DelegatingHandler`, plus lifecycle hooks.
 
 ```bash
 npm install @cordy/endpoint-builder
 ```
 
-```bash
-pnpm add @cordy/endpoint-builder
-```
+## Quick start
 
-## Quick Start
-
-```typescript
-import { createClient } from "@cordy/endpoint-builder";
-
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  auth: "your-token-here",
-});
-
-// Type-safe path parameters
-const user = await api
-  .get("/users/:id", { params: { id: 1 } }) // TypeScript enforces params!
-  .data();
-
-// Create a user
-const newUser = await api
-  .post("/users", { body: { name: "John", email: "john@example.com" } })
-  .data();
-```
-
-## Type-Safe Path Parameters
-
-Path parameters are automatically extracted from URL strings:
-
-```typescript
-// TypeScript requires params: { id: string | number }
-const user = await api
-  .get("/users/:id", { params: { id: 123 } })
-  .data();
-
-// Multiple params - all required!
-const comment = await api
-  .get("/posts/:postId/comments/:commentId", {
-    params: { postId: 1, commentId: 5 }
-  })
-  .data();
-
-// No params needed for static paths
-const users = await api.get("/users").data();
-```
-
-## Schema Validation with Standard Schema
-
-Validate responses at runtime using any Standard Schema compatible library (zod, valibot, arktype):
-
-```typescript
+```ts
 import { createClient } from "@cordy/endpoint-builder";
 import { z } from "zod";
 
-const api = createClient({ baseUrl: "https://api.example.com" });
+const User = z.object({ id: z.number(), name: z.string() });
 
-// Define your schema
-const UserSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  email: z.string().email(),
+const api = createClient({ baseUrl: "https://api.example.com", auth: token });
+
+const user = await api.get("/users/:id", { params: { id: 1 } }).returns(User);
+//    ^? { id: number; name: string }
+
+const created = await api.post("/users", { json: { name: "Ann" } }).returns(User);
+```
+
+Requests are **lazy**: nothing is sent until you `await` the builder or call `send()`, `safe()` or `raw()`.
+
+## Building a client
+
+Use options or the fluent builder. Both produce the same immutable `Client`.
+
+```ts
+import { Client, bearer } from "@cordy/endpoint-builder";
+
+const api = Client.builder("https://api.example.com")
+  .header("X-App", "web")
+  .timeout(10_000)                // per attempt, default 30s
+  .auth(bearer(() => store.token))
+  .retry({ limit: 3 })            // default: 2 retries of idempotent requests
+  .errors({ 401: Unauthorized })  // typed error bodies shared by every request
+  .use(logging)                   // middleware
+  .onError(report)                // hooks: onRequest / onResponse / onError / onRetry
+  .build();
+
+// derive new clients, the parent is untouched
+const admin = api.with({ headers: { "X-Role": "admin" } });
+const v2 = api.extend(b => b.baseUrl("https://api.example.com/v2"));
+```
+
+<details>
+<summary>All client options</summary>
+
+| Option | Default | |
+|---|---|---|
+| `baseUrl` | `""` | Prepended to relative paths |
+| `headers` | `{}` | Default headers |
+| `query` | — | Default query params, merged with the request query |
+| `timeout` | `30_000` | Per-attempt timeout in ms (`false` = none) |
+| `retry` | `{}` | `RetryOptions`, a number (limit) or `false` |
+| `auth` | `false` | `AuthStrategy` or a bearer token string |
+| `dedupe` | `false` | Collapse identical concurrent GET/HEAD requests |
+| `fetch` | `globalThis.fetch` | Custom fetch (tests, SSR, proxies) |
+| `middleware` | `[]` | Middleware, outermost first |
+| `onRequest` / `onResponse` / `onError` / `onRetry` | — | Lifecycle hooks |
+| `unwrap` | — | Extract payload from an envelope (`b => b.data`) before validation |
+| `querySerializer` | `{ arrayFormat: "repeat" }` | `repeat` / `brackets` / `indices` / `comma`, or a function |
+| `errors` | `{}` | Error body schemas by status code |
+| `init` | `{}` | Extra `fetch` init: `credentials`, `cache`, `mode`, … |
+| `responseType` | `"auto"` | `auto` / `json` / `text` / `blob` / `arrayBuffer` / `formData` / `stream` |
+
+</details>
+
+## Requests
+
+```ts
+const users = await api
+  .get("/users", { query: { page: 2, tags: ["a", "b"], filter: { role: "admin" } } })
+  // → /users?page=2&tags=a&tags=b&filter[role]=admin
+  .header("X-Trace", id)
+  .timeout(5_000)
+  .retry(false)
+  .signal(controller.signal)
+  .returns(z.array(User));
+```
+
+A builder is a description of a request, and every method returns a new one:
+
+```ts
+const listUsers = api.get("/users").returns(UserList);
+const page1 = await listUsers.query({ page: 1 });
+const page2 = await listUsers.query({ page: 2 });
+```
+
+### Path params
+
+`/users/:id`, optional `/:id?`, `/files/:name.json` and OpenAPI-style `/{id}` are all typed. Values are URI-encoded. If a param is missing, you get a compile-time error, and a `ValidationError` at runtime.
+
+```ts
+api.get("/users/:userId/posts/:postId", { params: { userId: 1, postId: 2 } });
+api.get("/users/:id"); // ❌ compile error: params are required
+```
+
+### Bodies
+
+```ts
+api.post("/users", { json: data });                      // JSON
+api.post("/users").json(data, CreateUser);               // JSON, validated before sending
+api.post("/upload").body(formData);                      // native bodies are passed through
+api.post("/login").form({ user, password });             // x-www-form-urlencoded
+api.post("/avatar").multipart({ file: blob, name: "a" }); // multipart, boundary set by fetch
+```
+
+### Responses
+
+```ts
+await api.get("/x");                     // unknown, decoded by Content-Type
+await api.get("/x").returns(Schema);     // validated and typed
+await api.get("/x").as<Thing>();         // typed, no runtime check
+await api.get("/x").text();              // also .blob() .arrayBuffer() .formData() .stream()
+await api.get("/x").returns(User).map(u => u.name);  // composable transforms
+const res = await api.get("/x").send();  // { data, status, headers, response, request }
+const native = await api.get("/x").raw(); // native Response, no status check
+```
+
+## Validation
+
+Every schema slot accepts:
+
+- any **Standard Schema**: zod ≥ 3.24, valibot ≥ 1, arktype ≥ 2, effect/schema, yup ≥ 1.7, …
+- an object with **`parse(value)`**
+- a **function** `(value) => output` that throws when the value is invalid
+
+The input type is inferred from the schema input and the data type from the schema output, so transforms and coercions are typed correctly. Sync validators run synchronously, without an extra await.
+
+## Typed endpoint contracts
+
+Describe the API once, Elysia-style, and bind it to any client:
+
+```ts
+import { createClient, defineContract, endpoint } from "@cordy/endpoint-builder";
+
+export const contract = defineContract({
+  users: {
+    list:   endpoint.get("/users").query(ListQuery).returns(z.array(User)),
+    get:    endpoint.get("/users/:id").returns(User).errors({ 404: NotFound }),
+    create: endpoint.post("/users").body(CreateUser).returns(User).errors({ 422: Problem }),
+    remove: endpoint.delete("/users/:id"),
+  },
+  health: endpoint.get("/health").as<{ status: "ok" }>(),
 });
 
-// Validate response - throws ValidationError if invalid
-const user = await api
-  .get("/users/:id", { params: { id: 1 } })
-  .schema(UserSchema); // Type inferred from schema!
+const api = createClient({ baseUrl, auth }).api(contract);
 
-// user is typed as { id: number; name: string; email: string }
-console.log(user.name);
+const user = await api.users.get({ params: { id: 1 } });   // User
+await api.users.create({ body: { name: "Ann", email: "a@b.co" } }); // body typed from CreateUser input
+await api.users.list();                                     // input optional, nothing is required
+await api.users.get({ params: { id: 1 } }).timeout(1000).safe(); // still a RequestBuilder
 ```
 
-### Using with Valibot
+Helper types: `EndpointInput<E>`, `EndpointData<E>`, `EndpointErrors<E>`.
 
-```typescript
-import * as v from "valibot";
+## Errors and `.safe()`
 
-const UserSchema = v.object({
-  id: v.number(),
-  name: v.string(),
-  email: v.pipe(v.string(), v.email()),
+Every error extends `EndpointError` and has a `type` discriminator:
+
+| Class | `type` | When |
+|---|---|---|
+| `HttpError<Status, Body>` | `http` | Non-2xx response. `body` is parsed, and validated if a schema is declared |
+| `NetworkError` | `network` | DNS, connection or CORS failure |
+| `TimeoutError` | `timeout` | The per-attempt timeout elapsed |
+| `AbortError` | `abort` | Your `AbortSignal` fired |
+| `ValidationError` | `validation` | A schema rejected `params` / `query` / `body` / `response` / `error` |
+| `ParseError` | `parse` | Malformed JSON body |
+
+```ts
+const { data, error } = await api.users.get({ params: { id } }).safe();
+
+if (isHttpError(error, 404)) {
+  error.body;            // { message: string }, typed from .errors({ 404: NotFound })
+} else if (error?.type === "validation") {
+  error.stage;           // "response"
+  error.issues;
+} else if (error) {
+  throw error;
+} else {
+  data;                  // User
+}
+```
+
+`safe()` only catches library errors. Bugs in your own code, such as an exception inside `map()`, are still thrown.
+
+## Retries
+
+```ts
+createClient({
+  retry: {
+    limit: 2,                    // retries after the first attempt
+    methods: ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"], // idempotent only by default
+    statusCodes: [408, 425, 429, 500, 502, 503, 504],
+    backoff: "exponential",      // | "linear" | "constant" | (attempt) => ms
+    delay: 300, maxDelay: 30_000, jitter: true,
+    retryAfter: true,            // honour Retry-After (number = cap in ms)
+    networkErrors: true, timeouts: true,
+    shouldRetry: ({ response, error, attempt }) => undefined, // undefined → default rules
+  },
 });
 
-const user = await api
-  .get("/users/:id", { params: { id: 1 } })
-  .schema(UserSchema);
+api.post("/payments").retry({ methods: ["POST"], limit: 5 }); // opt in per request
 ```
 
-## Safe Mode - Error Handling
-
-Use `.safe()` for Result-style error handling instead of throwing:
-
-```typescript
-const result = await api
-  .get("/users/:id", { params: { id: 999 } })
-  .schema(UserSchema)
-  .safe();
-
-if (result.error) {
-  // Handle error (ValidationError, HttpError, or network error)
-  console.error("Failed:", result.error.message);
-  return;
-}
-
-// TypeScript knows result.data is defined here
-console.log(result.data.name);
-```
-
-### Error Types
-
-```typescript
-import { ValidationError, HttpError } from "@cordy/endpoint-builder";
-
-const result = await api.get("/users/:id", { params: { id: 1 } })
-  .schema(UserSchema)
-  .safe();
-
-if (result.error) {
-  if (result.error instanceof ValidationError) {
-    // Response didn't match schema
-    console.error("Invalid data:", result.error.issues);
-  } else if ((result.error as HttpError).status) {
-    // HTTP error (4xx, 5xx)
-    const httpError = result.error as HttpError;
-    console.error(`HTTP ${httpError.status}:`, httpError.statusText);
-  } else {
-    // Network error
-    console.error("Network error:", result.error.message);
-  }
-}
-```
+Backoff sleeps can be aborted. Bodies of failed attempts are discarded, so keep-alive sockets are released. Stream bodies are never replayed.
 
 ## Authentication
 
-### Simple Auth Options
+```ts
+import { apiKey, basic, bearer, refreshable } from "@cordy/endpoint-builder/auth";
 
-```typescript
-// Bearer token
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  auth: "your-token", // Becomes "Bearer your-token"
-});
+bearer("token");                         // or bearer(() => store.token), async allowed
+apiKey(key);                             // X-API-Key header
+apiKey(key, { query: "api_key" });       // ?api_key=…
+basic("user", "pässword");               // UTF-8 safe
 
-// API Key
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  apiKey: "your-api-key", // Becomes "X-API-Key: your-api-key"
+refreshable({
+  getToken: () => store.access,
+  refresh: async () => { store.access = await renewToken(store.refresh); },
 });
 ```
 
-### Auth Helpers
+`refreshable` reacts to `401` (configurable). Concurrent failures share **one** refresh, and each request is replayed **at most once**. Credentials are applied on every attempt. Use `.auth(false)` for anonymous requests. To write your own strategy, implement `{ apply(ctx), shouldRefresh?(res), refresh?(ctx, res) }`.
 
-For more control, use the built-in auth helpers:
+## Middleware and hooks
 
-```typescript
-import { createClient, bearerAuth, basicAuth, apiKeyAuth, refreshAuth } from "@cordy/endpoint-builder";
+```ts
+import type { Middleware } from "@cordy/endpoint-builder";
 
-// Bearer token (static or dynamic)
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  authStrategy: bearerAuth("my-token"),
-});
-
-// Dynamic token (called on each request)
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  authStrategy: bearerAuth(() => getTokenFromStore()),
-});
-
-// Basic authentication
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  authStrategy: basicAuth("username", "password"),
-});
-
-// API key with custom header
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  authStrategy: apiKeyAuth("my-key", "X-Custom-Key"),
-});
-
-// Refresh token with auto-refresh on 401
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  authStrategy: refreshAuth({
-    getToken: () => localStorage.getItem("access_token") || "",
-    getRefreshToken: () => localStorage.getItem("refresh_token") || "",
-    refresh: async (refreshToken) => {
-      const response = await fetch("/auth/refresh", {
-        method: "POST",
-        body: JSON.stringify({ token: refreshToken }),
-      });
-      const { accessToken } = await response.json();
-      localStorage.setItem("access_token", accessToken);
-      return accessToken;
-    },
-    shouldRefresh: (response) => response.status === 401, // Optional, default is 401
-  }),
-});
-```
-
-## Response Unwrapping
-
-Many APIs wrap responses in a data envelope. Use unwrap to extract the data:
-
-```typescript
-// API returns { data: { id: 1, name: "John" }, meta: { timestamp: "..." } }
-
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  unwrap: (response) => response.data, // Extract data globally
-});
-
-// Now you get the unwrapped data directly
-const user = await api
-  .get("/users/:id", { params: { id: 1 } })
-  .schema(UserSchema);
-
-// user is { id: 1, name: "John" }, not wrapped
-
-// Disable unwrap for specific requests
-const fullResponse = await api
-  .get("/users/:id", { params: { id: 1 } })
-  .unwrap(false)
-  .data();
-// fullResponse is { data: {...}, meta: {...} }
-```
-
-## Transform Chains
-
-Transform validated data with type-safe chains:
-
-```typescript
-// Extract just the email from a validated user
-const email = await api
-  .get("/users/:id", { params: { id: 1 } })
-  .schema(UserSchema)
-  .transform((user) => user.email);
-
-// Transform paginated response to array of names
-const PaginatedSchema = z.object({
-  users: z.array(z.object({ id: z.number(), name: z.string() })),
-  total: z.number(),
-});
-
-const names = await api
-  .get("/users")
-  .schema(PaginatedSchema)
-  .transform((response) => response.users.map((u) => u.name));
-// names is string[]
-```
-
-## HTTP Methods
-
-```typescript
-// GET
-const user = await api.get("/users/:id", { params: { id: 1 } }).data();
-const users = await api.get("/users", { query: { page: 1, limit: 10 } }).data();
-
-// POST
-const newUser = await api
-  .post("/users", { body: { name: "John" } })
-  .data();
-
-// PUT
-const updated = await api
-  .put("/users/:id", { params: { id: 1 }, body: { name: "Updated" } })
-  .data();
-
-// PATCH
-const patched = await api
-  .patch("/users/:id", { params: { id: 1 }, body: { name: "Patched" } })
-  .data();
-
-// DELETE
-await api.delete("/users/:id", { params: { id: 1 } }).send();
-
-// HEAD
-await api.head("/users/:id", { params: { id: 1 } }).send();
-
-// OPTIONS
-const options = await api.options("/users").data();
-```
-
-## Request Options
-
-### Query Parameters
-
-```typescript
-const users = await api.get("/users", {
-  query: {
-    page: 2,
-    limit: 20,
-    sort: "name",
-    filter: ["active", "verified"],
+const timing: Middleware = async (ctx, next) => {
+  const started = performance.now();
+  try {
+    return await next(ctx);
+  } finally {
+    console.log(ctx.method, ctx.url, ctx.meta.feature, performance.now() - started);
   }
-}).data();
+};
+
+const api = Client.builder(baseUrl).use(timing).build();
+await api.get("/search").meta("feature", "search");
 ```
 
-### Custom Headers
+The pipeline is composed once per client. From outermost to innermost:
 
-```typescript
-// Per-request headers
-const data = await api.get("/data", {
-  headers: { "X-Request-ID": "abc123" }
-}).data();
+`hooks → dedupe → your middleware → retry → auth → fetch`
 
-// Global default headers
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  headers: {
-    "X-Client-Version": "1.0",
-    "Accept-Language": "en-US",
-  },
-});
-```
+Middleware can mutate `ctx` (url, headers, body, …), short-circuit with its own `Response` (caching, mocking), or post-process the response.
 
-### Timeout
+## Result helpers
 
-```typescript
-// Global timeout
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  timeout: 10000, // 10 seconds
-});
+`ok`, `err`, `isOk`, `isErr`, `unwrap`, `unwrapOr`, `mapResult`, `mapError`.
 
-// Per-request timeout
-const data = await api.get("/slow", { timeout: 30000 }).data();
-```
+## Migrating from 1.x
 
-## Retry Strategy
-
-```typescript
-import { createClient, ExponentialRetryStrategy } from "@cordy/endpoint-builder";
-
-// Simple retry (uses default exponential backoff)
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  retry: true,
-});
-
-// Custom retry strategy
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  retryStrategy: new ExponentialRetryStrategy({
-    maxAttempts: 5,
-    baseDelay: 500,
-    maxDelay: 30000,
-  }),
-});
-
-// Disable retry for specific request
-const data = await api.get("/no-retry")
-  .retry(null)
-  .data();
-```
-
-## Request Deduplication
-
-Prevents duplicate concurrent requests:
-
-```typescript
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  dedupe: true,
-});
-
-// These return the same promise (single HTTP request)
-const p1 = api.get("/users").data();
-const p2 = api.get("/users").data();
-const [users1, users2] = await Promise.all([p1, p2]);
-// users1 === users2, only one HTTP request made
-```
-
-## Interceptors
-
-```typescript
-const api = createClient({
-  baseUrl: "https://api.example.com",
-  requestInterceptors: [
-    {
-      async onRequest(config) {
-        // Modify request before sending
-        config.headers["X-Timestamp"] = Date.now().toString();
-        return config;
-      },
-    },
-  ],
-  responseInterceptors: [
-    {
-      async onResponse(response) {
-        // Process response
-        console.log(`Response ${response.status}`);
-        return response;
-      },
-      async onError(error) {
-        // Handle errors
-        console.error("Request failed:", error.message);
-        return error;
-      },
-    },
-  ],
-});
-```
-
-## Full Configuration
-
-```typescript
-import {
-  createClient,
-  bearerAuth,
-  ExponentialRetryStrategy,
-  MemoryStoragePersist,
-} from "@cordy/endpoint-builder";
-
-const api = createClient({
-  // Base URL for all requests
-  baseUrl: "https://api.example.com",
-
-  // Default headers for all requests
-  headers: {
-    "Accept": "application/json",
-    "X-Client-Version": "1.0",
-  },
-
-  // Authentication (simple option)
-  auth: "your-token",
-  // Or API key
-  apiKey: "your-api-key",
-  // Or custom strategy (overrides auth/apiKey)
-  authStrategy: bearerAuth(() => getToken()),
-
-  // Request timeout in milliseconds
-  timeout: 10000,
-
-  // Enable request deduplication
-  dedupe: true,
-
-  // Enable retry (uses default strategy)
-  retry: true,
-  // Or custom retry strategy
-  retryStrategy: new ExponentialRetryStrategy({
-    maxAttempts: 3,
-    baseDelay: 300,
-    maxDelay: 10000,
-  }),
-
-  // Default response type
-  responseType: "json",
-
-  // Custom storage for auth tokens
-  storage: new MemoryStoragePersist(),
-
-  // Global response unwrap function
-  unwrap: (response) => response.data,
-
-  // Request/response interceptors
-  requestInterceptors: [],
-  responseInterceptors: [],
-});
-```
-
-## TypeScript Support
-
-Full type inference throughout the API:
-
-```typescript
-import { z } from "zod";
-
-const UserSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-});
-
-// Path params are inferred from URL
-api.get("/users/:id", { params: { id: 1 } }); // id is required
-api.get("/users/:id", {}); // Error: params is required
-
-// Schema output type is inferred
-const user = await api.get("/users/:id", { params: { id: 1 } })
-  .schema(UserSchema);
-// user is { id: number; name: string }
-
-// Transform output type is inferred
-const name = await api.get("/users/:id", { params: { id: 1 } })
-  .schema(UserSchema)
-  .transform((u) => u.name);
-// name is string
-
-// Safe mode result is typed
-const result = await api.get("/users/:id", { params: { id: 1 } })
-  .schema(UserSchema)
-  .safe();
-// result is { data?: { id: number; name: string }; error?: Error }
-```
-
-## Legacy API
-
-The previous `UniversalClient` API is still available as `createUniversalClient`:
-
-```typescript
-import { createUniversalClient } from "@cordy/endpoint-builder";
-
-const api = createUniversalClient({
-  baseUrl: "https://api.example.com",
-});
-
-// Simple methods
-const users = await api.get("/users");
-const user = await api.post("/users", { name: "John" });
-
-// Access underlying HttpClient
-const response = await api.httpClient.get("/users/1").data();
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+See [MIGRATION.md](./MIGRATION.md).
 
 ## License
 
