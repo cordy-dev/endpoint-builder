@@ -69,7 +69,7 @@ export class AbortError extends EndpointError {
 	}
 }
 
-export type ValidationStage = "params" | "query" | "body" | "response" | "error";
+export type ValidationStage = "params" | "query" | "headers" | "body" | "response" | "error";
 
 /** A schema rejected request input or response output */
 export class ValidationError extends EndpointError {

@@ -1,5 +1,6 @@
 import type { AuthStrategy } from "./auth/types";
-import type { RetryOptions } from "./retry";
+import type { EndpointError } from "./errors";
+import type { RetryListener, RetryOptions } from "./retry";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
 
@@ -43,6 +44,25 @@ export interface RequestContext {
 	attempt: number;
 	/** Free-form per-request bag for middleware (like `HttpRequestMessage.Options`) */
 	meta: Record<string, unknown>;
+	/** Hooks attached to this request with `.onRequest()`, `.onResponse()` and `.onRetry()` (client hooks run first) */
+	hooks: RequestHooks | undefined;
+}
+
+/** Runs before the request is sent, outside retries */
+export type OnRequestHook = (ctx: RequestContext) => MaybePromise<void>;
+/** Return a `Response` to replace the received one */
+export type OnResponseHook = (response: Response, ctx: RequestContext) => MaybePromise<Response | void>;
+/** Runs after the data was validated and mapped. Throwing fails the request. */
+export type OnSuccessHook<T = unknown> = (data: T, response: HttpResponse<T>) => MaybePromise<void>;
+/** Observe failures. Throwing from the hook replaces the error. */
+export type OnErrorHook = (error: EndpointError, ctx: RequestContext | undefined) => MaybePromise<void>;
+export type OnRetryHook = RetryListener;
+
+/** Hooks of a single request */
+export interface RequestHooks {
+	readonly onRequest: readonly OnRequestHook[];
+	readonly onResponse: readonly OnResponseHook[];
+	readonly onRetry: readonly OnRetryHook[];
 }
 
 /** `RequestInit` fields that are not managed by the builder itself */

@@ -8,7 +8,9 @@ Type-safe HTTP client for TypeScript, built on native `fetch`. It has zero depen
 - **Typed end to end.** Path params come from the URL string. Query, body, response and error bodies come from your schemas. The API is inspired by Elysia/Eden.
 - **Any Standard Schema validator.** Works with [Standard Schema](https://standardschema.dev) libraries: zod, valibot, arktype, effect, yup, … Plain functions go through `schema(fn)`.
 - **Immutable, lazy requests.** A client is a plain options object (`createClient(options)`), and every request is an immutable builder. Partially configured builders are safe to reuse.
-- **Typed endpoint contracts.** Describe an API once, bind it to a client and get a typed SDK.
+- **Typed endpoint contracts.** Describe an API once, bind it to a client and get a typed SDK. Params, query, headers, body, response and errors are all typed.
+- **Typed streams.** Server-Sent Events and NDJSON arrive as an async iterable of validated items.
+- **Test without a network.** `mockClient(contract, handlers)` answers your contract with typed handlers, through the real client.
 - **Errors you can check.** Each failure has its own class: `HttpError<404, NotFound>`, `NetworkError`, `TimeoutError`, `AbortError`, `ValidationError` and `ParseError`. They share a `type` discriminator, and `.safe()` returns them as a `Result`.
 - **Reliable defaults:**
   - Per-attempt timeouts that also cover a slow body.
@@ -16,7 +18,7 @@ Type-safe HTTP client for TypeScript, built on native `fetch`. It has zero depen
   - Single-flight token refresh that can't loop.
   - Dedupe keeps each caller's abort separate.
   - Connections are released for discarded bodies.
-- **Middleware pipeline** in the style of `DelegatingHandler`, plus lifecycle hooks.
+- **Lifecycle hooks** (`onRequest`, `onResponse`, `onSuccess`, `onError`, `onRetry`) on the client and on single requests, plus a **middleware pipeline**.
 
 ```bash
 npm install @cordy/endpoint-builder
@@ -195,6 +197,47 @@ await api.users.get({ params: { id: 1 } }).timeout(1000).safe(); // still a Requ
 
 Helper types: `EndpointInput<E>`, `EndpointData<E>`, `EndpointErrors<E>`.
 
+### Typed headers
+
+```ts
+const contract = defineContract({
+  me: endpoint.get("/me").headers(z.object({ "x-tenant": z.string() })).as<Me>(),
+  list: endpoint.get("/list").defaultHeaders({ "x-client": "web" }), // constant headers
+});
+
+await api.me({ headers: { "x-tenant": "acme" } }); // required, validated, then sent
+await api.me();                                    // ❌ compile error
+```
+
+Headers become optional when every field is optional or has a default. Without `.headers(schema)`, `headers` accepts any extra headers.
+
+## Streaming (SSE and NDJSON)
+
+`.sse()` and `.ndjson()` resolve, after the status check, with an `EventStream`: an async iterable of validated items.
+
+```ts
+const stream = await api.get("/chat", { query: { q } }).sse(ChatEvent, { stopOn: "[DONE]" });
+for await (const event of stream) {
+  event; // ChatEvent
+}
+
+// in a contract
+const contract = defineContract({
+  chat: endpoint.get("/chat").query(ChatQuery).sse(ChatEvent),
+  export: endpoint.get("/export").ndjson(Row),
+});
+for await (const row of await api.export()) { ... }
+
+// errors come before the first item, so safe() works as usual
+const { data: stream, error } = await api.chat({ query }).safe();
+```
+
+- Without a schema `.sse()` yields raw `SseMessage`s: `{ event, data, id, retry }`.
+- An invalid or malformed item ends the stream with a `ValidationError` or `ParseError`. Use `{ onInvalid: "skip" }` to drop such items instead.
+- `break` or `stream.cancel()` closes the connection. A user `AbortSignal` cancels the stream, which then throws `AbortError`. A dropped connection throws `NetworkError`.
+- The `timeout` covers the wait for the response, not the lifetime of the stream.
+- A stream is read once. Each `await` of the request opens a new connection, and streams are never deduped.
+
 ## Errors and `.safe()`
 
 Every error extends `EndpointError` and has a `type` discriminator:
@@ -264,7 +307,29 @@ refreshable({
 
 `refreshable` reacts to `401` (configurable). Concurrent failures share **one** refresh, and each request is replayed **at most once**. Credentials are applied on every attempt. Use `.auth(false)` for anonymous requests. To write your own strategy, implement `{ apply(ctx), shouldRefresh?(res), refresh?(ctx, res) }`.
 
-## Middleware and hooks
+## Hooks
+
+Hooks have names that tell you when they run. Set them on the client, or on a single request. Client hooks run first.
+
+```ts
+const api = createClient({
+  baseUrl,
+  onRequest:  ctx => { ctx.headers.set("x-id", newId()); },     // before sending, once per request
+  onResponse: (response, ctx) => { log(response.status); },     // when the response arrives; return a Response to replace it
+  onSuccess:  (data, response) => { metrics.ok(response.request.url); }, // final data, after validation and map()
+  onError:    (error, ctx) => { report(error); },               // library errors; throw to replace the error
+  onRetry:    ({ attempt, delay, error, response }) => { ... }, // before a failed attempt is retried
+});
+
+const user = await api.get("/users/:id", { params: { id } }).returns(User)
+  .onRequest(ctx => ctx.headers.set("x-trace", traceId))
+  .onSuccess(user => cache.set(user.id, user))   // register after returns()/map() so `user` has its final type
+  .onError(error => toast(error.message));
+```
+
+## Middleware
+
+For code that wraps the whole call (timing, caching, mocking), use middleware:
 
 ```ts
 import type { Middleware } from "@cordy/endpoint-builder";
@@ -278,7 +343,7 @@ const timing: Middleware = async (ctx, next) => {
   }
 };
 
-const api = Client.builder(baseUrl).use(timing).build();
+const api = createClient({ baseUrl, middleware: [timing] });
 await api.get("/search").meta("feature", "search");
 ```
 
@@ -286,7 +351,30 @@ The pipeline is composed once per client. From outermost to innermost:
 
 `hooks → dedupe → your middleware → retry → auth → fetch`
 
-Middleware can mutate `ctx` (url, headers, body, …), short-circuit with its own `Response` (caching, mocking), or post-process the response.
+Middleware can mutate `ctx` (url, headers, body, …), short-circuit with its own `Response` (caching), or post-process the response. With `dedupe: true`, middleware runs once per shared network call, while hooks run for every caller.
+
+## Testing
+
+`@cordy/endpoint-builder/testing` answers your contract without a network. Requests still go through the real client: parameters, query, headers and body are validated, and responses and error bodies are validated and decoded.
+
+```ts
+import { mockClient } from "@cordy/endpoint-builder/testing";
+
+const api = mockClient(contract, {
+  users: {
+    get: ({ params }) => ({ id: Number(params.id), name: "Ann" }),    // return type checked against the contract
+    remove: (_input, { fail }) => fail(404, { message: "no user" }),   // body typed from .errors({ 404: ... })
+  },
+  events: () => [{ n: 1 }, { n: 2 }],                                  // streams: any (async) iterable
+});
+
+await api.users.get({ params: { id: 1 } }); // { id: 1, name: "Ann" }
+```
+
+- Handlers receive `{ params, query, headers, body }` as they arrive on the wire (`params` and `query` are strings) and a typed `fail(status, body)`.
+- Endpoints without a handler answer `501` with `[mock] no handler for GET /users/1`.
+- Retries and the timeout are off by default. Pass client options as the third argument: `mockClient(contract, handlers, { auth, errors })`.
+- To test a client you configured yourself, inject `mockFetch(contract, handlers)` with `createClient({ fetch })`.
 
 ## Result helpers
 

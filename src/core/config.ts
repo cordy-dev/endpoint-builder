@@ -1,21 +1,16 @@
 import type { AuthStrategy } from "../auth/types";
-import type { EndpointError } from "../errors";
 import type { Middleware } from "../middleware";
-import type { RetryListener, RetryOptions } from "../retry";
+import type { RetryOptions } from "../retry";
 import type { Schema } from "../schema";
-import type { FetchLike, MaybePromise, QueryObject, RequestContext, RequestInitExtras, ResponseType } from "../types";
+import type { FetchLike, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, QueryObject, RequestInitExtras, ResponseType } from "../types";
 import type { QuerySerializer } from "../utils/query";
 
-export type OnRequestHook = (ctx: RequestContext) => MaybePromise<void>;
-/** Return a `Response` to replace the received one */
-export type OnResponseHook = (response: Response, ctx: RequestContext) => MaybePromise<Response | void>;
-/** Observe failures. Throwing from the hook replaces the error. */
-export type OnErrorHook = (error: EndpointError, ctx: RequestContext | undefined) => MaybePromise<void>;
-export type OnRetryHook = RetryListener;
+export type { OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook } from "../types";
 
 export interface Hooks {
 	readonly onRequest: readonly OnRequestHook[];
 	readonly onResponse: readonly OnResponseHook[];
+	readonly onSuccess: readonly OnSuccessHook[];
 	readonly onError: readonly OnErrorHook[];
 	readonly onRetry: readonly OnRetryHook[];
 }

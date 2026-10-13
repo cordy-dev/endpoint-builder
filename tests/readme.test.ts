@@ -35,7 +35,7 @@ describe("README", () => {
 			expectTypeOf(error.body).toEqualTypeOf<{ message: string }>();
 			seen = error.body.message;
 		} else if (error?.type === "validation") {
-			expectTypeOf(error.stage).toEqualTypeOf<"params" | "query" | "body" | "response" | "error">();
+			expectTypeOf(error.stage).toEqualTypeOf<"params" | "query" | "headers" | "body" | "response" | "error">();
 		} else if (error) {
 			throw error;
 		} else {

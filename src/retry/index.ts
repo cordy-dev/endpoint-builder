@@ -145,6 +145,7 @@ export function retryMiddleware(listeners: readonly RetryListener[] = []): Middl
 				discardBody(response);
 			}
 			for (const listener of listeners) await listener({ ...state, delay });
+			if (ctx.hooks) for (const listener of ctx.hooks.onRetry) await listener({ ...state, delay });
 			await sleep(delay, ctx.signal, { method: ctx.method, url: ctx.url });
 		}
 	}

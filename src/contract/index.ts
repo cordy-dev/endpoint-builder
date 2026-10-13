@@ -3,6 +3,7 @@ import { type ClientCore, type ErrorSchemas, type InferErrors, type MergeErrors,
 import type { ErrorMap } from "../errors";
 import type { RetryInput } from "../retry";
 import type { InferInput, InferOutput, Schema } from "../schema";
+import type { EventStream, NdjsonOptions, SseMessage, SseOptions, StreamSpec } from "../stream";
 import type { HeadersInput, HttpMethod, QueryInput, ResponseType, Simplify } from "../types";
 import type { HasParams, HasRequiredParams, PathParams } from "../utils/path";
 
@@ -23,7 +24,9 @@ export interface EndpointDefinition {
 	readonly responseSchema?: Schema;
 	readonly responseType?: ResponseType;
 	readonly errorSchemas?: ErrorSchemas;
-	readonly headers?: readonly HeadersInput[];
+	readonly headersSchema?: Schema;
+	readonly defaultHeaders?: readonly HeadersInput[];
+	readonly stream?: StreamSpec;
 	readonly timeout?: number | false;
 	readonly retry?: RetryInput;
 	readonly auth?: AuthStrategy | false;
@@ -40,6 +43,7 @@ export interface EndpointSpec {
 	path: string;
 	params: unknown;
 	query: unknown;
+	headers: unknown;
 	body: unknown;
 	data: unknown;
 	errors: ErrorMap;
@@ -50,6 +54,7 @@ type Initial<M extends HttpMethod, P extends string> = {
 	path: P;
 	params: Unset;
 	query: Unset;
+	headers: Unset;
 	body: Unset;
 	data: unknown;
 	errors: {};
@@ -87,6 +92,14 @@ export class Endpoint<S extends EndpointSpec = EndpointSpec> {
 		return this.#with({ querySchema: schema });
 	}
 
+	/**
+	 * Declare typed request headers. Callers must (or may, when all fields are optional) pass them
+	 * as `headers`; they are validated and sent. Use `defaultHeaders()` for constant headers.
+	 */
+	headers<Sc extends Schema>(schema: Sc): Endpoint<Patch<S, { headers: Sc }>> {
+		return this.#with({ headersSchema: schema });
+	}
+
 	/** Validate the request body (sent as JSON unless it is a native body) */
 	body<Sc extends Schema>(schema: Sc, kind: "auto" | "json" | "form" | "multipart" = "auto"): Endpoint<Patch<S, { body: Sc }>> {
 		return this.#with({ bodySchema: schema, bodyKind: kind });
@@ -107,12 +120,28 @@ export class Endpoint<S extends EndpointSpec = EndpointSpec> {
 		return this.#with({ errorSchemas: { ...this.definition.errorSchemas, ...schemas } });
 	}
 
+	/**
+	 * Server-Sent Events. Calls resolve with an `EventStream` of validated JSON payloads
+	 * (or raw `SseMessage`s when no schema is given).
+	 */
+	sse(): Endpoint<Patch<S, { data: EventStream<SseMessage> }>>;
+	sse<Sc extends Schema>(schema: Sc, options?: SseOptions): Endpoint<Patch<S, { data: EventStream<InferOutput<Sc>> }>>;
+	sse(schema?: Schema, options?: SseOptions): unknown {
+		return this.#with({ stream: { kind: "sse", schema, options }, responseType: "stream" });
+	}
+
+	/** Newline-delimited JSON. Calls resolve with an `EventStream` of validated lines. */
+	ndjson<Sc extends Schema>(schema: Sc, options?: NdjsonOptions): Endpoint<Patch<S, { data: EventStream<InferOutput<Sc>> }>> {
+		return this.#with({ stream: { kind: "ndjson", schema, options }, responseType: "stream" });
+	}
+
 	responseType(type: ResponseType): this {
 		return this.#with({ responseType: type });
 	}
 
-	headers(headers: HeadersInput): this {
-		return this.#with({ headers: [...(this.definition.headers ?? []), headers] });
+	/** Constant headers sent with every call of this endpoint */
+	defaultHeaders(headers: HeadersInput): this {
+		return this.#with({ defaultHeaders: [...(this.definition.defaultHeaders ?? []), headers] });
 	}
 
 	timeout(ms: number | false): this {
@@ -170,15 +199,16 @@ type BodyPart<M extends HttpMethod, TBody> = [TBody] extends [Unset]
 	? M extends BodylessMethod ? {} : { body?: unknown }
 	: Field<"body", InferInput<TBody>>;
 
+type HeadersPart<THeaders> = [THeaders] extends [Unset] ? { headers?: HeadersInput } : Field<"headers", InferInput<THeaders>>;
+
 interface CommonInput {
-	headers?: HeadersInput;
 	signal?: AbortSignal;
 	timeout?: number | false;
 }
 
 /** Input object accepted by a bound endpoint */
 export type EndpointInput<E> = E extends Endpoint<infer S>
-	? Simplify<ParamsPart<S["path"], S["params"]> & QueryPart<S["query"]> & BodyPart<S["method"], S["body"]> & CommonInput>
+	? Simplify<ParamsPart<S["path"], S["params"]> & QueryPart<S["query"]> & HeadersPart<S["headers"]> & BodyPart<S["method"], S["body"]> & CommonInput>
 	: never;
 
 /** Response data of an endpoint */
@@ -215,14 +245,16 @@ interface RuntimeInput {
 	params?: Record<string, unknown>;
 	query?: QueryInput;
 	body?: unknown;
-	headers?: HeadersInput;
+	headers?: HeadersInput | Record<string, unknown>;
 	signal?: AbortSignal;
 	timeout?: number | false;
 }
 
 /** @internal create a request builder for an endpoint call */
 export function createEndpointRequest(core: ClientCore, def: EndpointDefinition, input: RuntimeInput = {}): RequestBuilder<any, any> {
-	const headers = input.headers ? [...(def.headers ?? []), input.headers] : def.headers;
+	// with a headers schema the caller's headers are validated, otherwise they are plain extra headers
+	const typedHeaders = def.headersSchema !== undefined;
+	const headers = input.headers && !typedHeaders ? [...(def.defaultHeaders ?? []), input.headers as HeadersInput] : def.defaultHeaders;
 	const state: RequestState = {
 		method: def.method,
 		path: def.path,
@@ -235,6 +267,9 @@ export function createEndpointRequest(core: ClientCore, def: EndpointDefinition,
 		bodyKind: def.bodyKind ?? "auto",
 		bodySchema: def.bodySchema,
 		...(headers ? { headers } : {}),
+		headersInput: typedHeaders ? input.headers : undefined,
+		headersSchema: def.headersSchema,
+		stream: def.stream,
 		timeout: input.timeout ?? def.timeout,
 		retry: def.retry,
 		auth: def.auth,

@@ -2,14 +2,14 @@ import { authMiddleware, bearer } from "../auth";
 import type { AuthStrategy } from "../auth/types";
 import { bindContract, type BoundContract, type Contract } from "../contract";
 import type { ErrorMap } from "../errors";
-import { compose, type Middleware } from "../middleware";
+import { compose, type Middleware, type Next } from "../middleware";
 import { dedupeMiddleware } from "../middleware/dedupe";
 import { mergeRetry, normalizeRetry, type RetryInput, retryMiddleware } from "../retry";
-import type { HeadersInput, HttpMethod, QueryInput, QueryObject, RequestInitExtras, ResponseType } from "../types";
+import type { HeadersInput, HttpMethod, QueryInput, QueryObject, RequestContext, RequestInitExtras, ResponseType } from "../types";
 import { toHeaderRecord } from "../utils/headers";
 import type { HasRequiredParams, PathParams } from "../utils/path";
 import { createQuerySerializer, defaultQuerySerializer, type QuerySerializer, type QuerySerializerOptions } from "../utils/query";
-import type { ClientConfig, Hooks, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, Unwrap } from "./config";
+import type { ClientConfig, Hooks, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, Unwrap } from "./config";
 import { type ClientCore, type ErrorSchemas, type InferErrors, type MergeErrors, RequestBuilder, type RequestState } from "./request";
 import { createTransport } from "./transport";
 
@@ -18,7 +18,7 @@ import { createTransport } from "./transport";
 type OneOrMany<T> = T | readonly T[];
 
 /** Error map declared through `options.errors` */
-type ErrorsOf<O> = O extends { errors: infer E extends ErrorSchemas } ? InferErrors<E> : {};
+export type ErrorsOf<O> = O extends { errors: infer E extends ErrorSchemas } ? InferErrors<E> : {};
 
 export interface ClientOptions<TErrorSchemas extends ErrorSchemas = ErrorSchemas> {
 	/** Prepended to relative paths */
@@ -41,6 +41,8 @@ export interface ClientOptions<TErrorSchemas extends ErrorSchemas = ErrorSchemas
 	middleware?: readonly Middleware[];
 	onRequest?: OneOrMany<OnRequestHook>;
 	onResponse?: OneOrMany<OnResponseHook>;
+	/** Runs with the final data, after validation and `map()` */
+	onSuccess?: OneOrMany<OnSuccessHook>;
 	onError?: OneOrMany<OnErrorHook>;
 	onRetry?: OneOrMany<OnRetryHook>;
 	/** Extract the payload from an envelope, e.g. `body => body.data` (applied before validation) */
@@ -55,7 +57,7 @@ export interface ClientOptions<TErrorSchemas extends ErrorSchemas = ErrorSchemas
 	responseType?: ResponseType;
 }
 
-const EMPTY_HOOKS: Hooks = { onRequest: [], onResponse: [], onError: [], onRetry: [] };
+const EMPTY_HOOKS: Hooks = { onRequest: [], onResponse: [], onSuccess: [], onError: [], onRetry: [] };
 
 const DEFAULT_CONFIG: ClientConfig = {
 	baseUrl: "",
@@ -88,6 +90,7 @@ function applyOptions(base: ClientConfig, options: ClientOptions): ClientConfig 
 	const hooks: Hooks = {
 		onRequest: [...base.hooks.onRequest, ...many(options.onRequest)],
 		onResponse: [...base.hooks.onResponse, ...many(options.onResponse)],
+		onSuccess: [...base.hooks.onSuccess, ...many(options.onSuccess)],
 		onError: [...base.hooks.onError, ...many(options.onError)],
 		onRetry: [...base.hooks.onRetry, ...many(options.onRetry)],
 	};
@@ -190,6 +193,10 @@ export class ClientBuilder<TErrors extends ErrorMap = {}> {
 		return this.#with({ onResponse: hook });
 	}
 
+	onSuccess(hook: OnSuccessHook): ClientBuilder<TErrors> {
+		return this.#with({ onSuccess: hook });
+	}
+
 	onError(hook: OnErrorHook): ClientBuilder<TErrors> {
 		return this.#with({ onError: hook });
 	}
@@ -271,8 +278,7 @@ export class Client<TErrors extends ErrorMap = {}> {
 	constructor(config: ClientConfig = DEFAULT_CONFIG) {
 		const { hooks } = config;
 		const layers: Middleware[] = [];
-		if (hooks.onRequest.length || hooks.onResponse.length) layers.push(hooksMiddleware(hooks));
-		layers.push(dedupeMiddleware(), ...config.middleware, retryMiddleware(hooks.onRetry), authMiddleware());
+		layers.push(hooksMiddleware(hooks), dedupeMiddleware(), ...config.middleware, retryMiddleware(hooks.onRetry), authMiddleware());
 		this.#core = { config, pipeline: compose(layers, createTransport(config.fetch)) };
 	}
 
@@ -353,16 +359,27 @@ export class Client<TErrors extends ErrorMap = {}> {
 	}
 }
 
+/** Client hooks first, then the hooks attached to the request (`ctx.hooks`) */
 function hooksMiddleware(hooks: Hooks): Middleware {
-	return async (ctx, next) => {
+	// non-async dispatcher: requests without hooks pay no extra promise
+	return (ctx, next) => hooks.onRequest.length || hooks.onResponse.length || ctx.hooks ? run(ctx, next) : next(ctx);
+
+	async function run(ctx: RequestContext, next: Next): Promise<Response> {
 		for (const hook of hooks.onRequest) await hook(ctx);
+		if (ctx.hooks) for (const hook of ctx.hooks.onRequest) await hook(ctx);
 		let response = await next(ctx);
 		for (const hook of hooks.onResponse) {
 			const replaced = await hook(response, ctx);
 			if (replaced instanceof Response) response = replaced;
 		}
+		if (ctx.hooks) {
+			for (const hook of ctx.hooks.onResponse) {
+				const replaced = await hook(response, ctx);
+				if (replaced instanceof Response) response = replaced;
+			}
+		}
 		return response;
-	};
+	}
 }
 
 /**

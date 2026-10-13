@@ -4,7 +4,8 @@ import type { Next } from "../middleware";
 import { err, ok, type Result } from "../result";
 import { mergeRetry, type RetryInput } from "../retry";
 import { type InferInput, type InferOutput, type Schema, validate } from "../schema";
-import type { HeadersInput, HttpMethod, HttpResponse, QueryInput, RequestContext, RequestInitExtras, ResponseType, Simplify } from "../types";
+import { EventStream, type NdjsonOptions, openStream, type SseMessage, type SseOptions, type StreamSpec } from "../stream";
+import type { HeadersInput, HttpMethod, HttpResponse, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, QueryInput, RequestContext, RequestInitExtras, ResponseType, Simplify } from "../types";
 import { type FormInput, isNativeBody, toFormData, toUrlEncoded } from "../utils/body";
 import { decodeBody, decodeErrorBody } from "../utils/decode";
 import { applyHeaders, headersFromRecord } from "../utils/headers";
@@ -42,6 +43,11 @@ export interface RequestState {
 	readonly bodyKind?: BodyKind;
 	readonly bodySchema?: Schema | undefined;
 	readonly headers?: readonly HeadersInput[];
+	/** User supplied headers validated by `headersSchema` (typed endpoint headers) */
+	readonly headersInput?: unknown;
+	readonly headersSchema?: Schema | undefined;
+	readonly hooks?: StateHooks | undefined;
+	readonly stream?: StreamSpec | undefined;
 	readonly timeout?: number | false | undefined;
 	readonly retry?: RetryInput | undefined;
 	readonly auth?: AuthStrategy | false | undefined;
@@ -55,6 +61,17 @@ export interface RequestState {
 	readonly unwrap?: Unwrap | false | undefined;
 	readonly maps?: readonly MapFn[];
 }
+
+/** @internal hooks registered on a single request */
+export interface StateHooks {
+	readonly onRequest: readonly OnRequestHook[];
+	readonly onResponse: readonly OnResponseHook[];
+	readonly onRetry: readonly OnRetryHook[];
+	readonly onSuccess: readonly OnSuccessHook<any>[];
+	readonly onError: readonly OnErrorHook[];
+}
+
+const NO_HOOKS: StateHooks = { onRequest: [], onResponse: [], onRetry: [], onSuccess: [], onError: [] };
 
 async function check(schema: Schema, value: unknown, stage: ValidationStage, request: ErrorRequest): Promise<any> {
 	let outcome = validate(schema, value);
@@ -224,27 +241,83 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 
 	/** Read the body as text */
 	text(): RequestBuilder<string, TErrors> {
-		return this.#with({ responseType: "text", responseSchema: undefined, maps: [] });
+		return this.#with({ responseType: "text", responseSchema: undefined, maps: [], stream: undefined });
 	}
 
 	/** Read the body as `Blob` */
 	blob(): RequestBuilder<Blob, TErrors> {
-		return this.#with({ responseType: "blob", responseSchema: undefined, maps: [] });
+		return this.#with({ responseType: "blob", responseSchema: undefined, maps: [], stream: undefined });
 	}
 
 	/** Read the body as `ArrayBuffer` */
 	arrayBuffer(): RequestBuilder<ArrayBuffer, TErrors> {
-		return this.#with({ responseType: "arrayBuffer", responseSchema: undefined, maps: [] });
+		return this.#with({ responseType: "arrayBuffer", responseSchema: undefined, maps: [], stream: undefined });
 	}
 
 	/** Read the body as `FormData` */
 	formData(): RequestBuilder<FormData, TErrors> {
-		return this.#with({ responseType: "formData", responseSchema: undefined, maps: [] });
+		return this.#with({ responseType: "formData", responseSchema: undefined, maps: [], stream: undefined });
 	}
 
 	/** Get the body stream without reading it */
 	stream(): RequestBuilder<ReadableStream<Uint8Array> | null, TErrors> {
-		return this.#with({ responseType: "stream", responseSchema: undefined, maps: [] });
+		return this.#with({ responseType: "stream", responseSchema: undefined, maps: [], stream: undefined });
+	}
+
+	/**
+	 * Read the body as Server-Sent Events. Resolves (after the status check) with an async iterable
+	 * of validated JSON payloads. Without a schema it yields raw `SseMessage`s.
+	 *
+	 * ```ts
+	 * const stream = await api.get("/chat").sse(ChatEvent, { stopOn: "[DONE]" });
+	 * for await (const event of stream) event; // ChatEvent
+	 * ```
+	 */
+	sse(): RequestBuilder<EventStream<SseMessage>, TErrors>;
+	sse<S extends Schema>(schema: S, options?: SseOptions): RequestBuilder<EventStream<InferOutput<S>>, TErrors>;
+	sse(schema?: Schema, options?: SseOptions): RequestBuilder<EventStream<any>, TErrors> {
+		return this.#with({ responseType: "stream", responseSchema: undefined, maps: [], stream: { kind: "sse", schema, options } });
+	}
+
+	/** Read the body as newline-delimited JSON. Resolves with an async iterable of validated lines. */
+	ndjson<S extends Schema>(schema: S, options?: NdjsonOptions): RequestBuilder<EventStream<InferOutput<S>>, TErrors> {
+		return this.#with({ responseType: "stream", responseSchema: undefined, maps: [], stream: { kind: "ndjson", schema, options } });
+	}
+
+	// -------------------------------------------------------------------- hooks
+	// Request hooks run after the client hooks of the same name.
+
+	#hook<K extends keyof StateHooks>(key: K, hook: StateHooks[K][number]): RequestBuilder<TData, TErrors> {
+		const hooks = this.#state.hooks ?? NO_HOOKS;
+		return this.#with({ hooks: { ...hooks, [key]: [...hooks[key], hook] } });
+	}
+
+	/** Runs before the request is sent (once per request, not per retry attempt) */
+	onRequest(hook: OnRequestHook): RequestBuilder<TData, TErrors> {
+		return this.#hook("onRequest", hook);
+	}
+
+	/** Runs when the response arrives (before status handling). Return a `Response` to replace it. */
+	onResponse(hook: OnResponseHook): RequestBuilder<TData, TErrors> {
+		return this.#hook("onResponse", hook);
+	}
+
+	/** Runs before a failed attempt is retried */
+	onRetry(hook: OnRetryHook): RequestBuilder<TData, TErrors> {
+		return this.#hook("onRetry", hook);
+	}
+
+	/**
+	 * Runs with the final data (after validation and `map()`). Throwing fails the request.
+	 * Register it after `returns()` / `map()` so `data` has the final type.
+	 */
+	onSuccess(hook: OnSuccessHook<TData>): RequestBuilder<TData, TErrors> {
+		return this.#hook("onSuccess", hook);
+	}
+
+	/** Runs when the request fails with a library error. Throwing replaces the error. */
+	onError(hook: OnErrorHook): RequestBuilder<TData, TErrors> {
+		return this.#hook("onError", hook);
 	}
 
 	// ---------------------------------------------------------------- execution
@@ -326,8 +399,15 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 
 		const headers = headersFromRecord(config.headers);
 		if (state.headers) for (const patch of state.headers) applyHeaders(headers, patch);
+		if (state.headersSchema) {
+			const validated = await check(state.headersSchema, state.headersInput ?? {}, "headers", request);
+			applyHeaders(headers, validated as HeadersInput);
+		}
 		const responseType = state.responseType ?? config.responseType;
-		if (!headers.has("accept") && (responseType === "auto" || responseType === "json")) headers.set("accept", ACCEPT_JSON);
+		if (!headers.has("accept")) {
+			if (state.stream) headers.set("accept", state.stream.kind === "sse" ? "text/event-stream" : "application/x-ndjson");
+			else if (responseType === "auto" || responseType === "json") headers.set("accept", ACCEPT_JSON);
+		}
 
 		let body: BodyInit | undefined;
 		if (state.hasBody) {
@@ -346,10 +426,11 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 			timeout,
 			retry: mergeRetry(config.retry, state.retry),
 			auth: state.auth ?? config.auth,
-			dedupe: state.dedupe ?? config.dedupe,
+			dedupe: state.stream ? false : state.dedupe ?? config.dedupe,
 			init: state.init ? { ...config.init, ...state.init } : config.init,
 			attempt: 0,
 			meta: { ...state.meta },
+			hooks: state.hooks,
 		};
 	}
 
@@ -360,20 +441,14 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 		const responseType = state.responseType ?? config.responseType;
 
 		try {
-			if (!response.ok) {
-				let body: unknown;
-				try {
-					body = await decodeErrorBody(response, request);
-				} finally {
-					releaseResponse(response);
-				}
-				const schema = state.errorSchemas?.[response.status] ?? config.errors[response.status];
-				if (schema) body = await check(schema, body, "error", request);
-				throw new HttpError(response.status, response.statusText, body, response.headers, response, request);
-			}
+			if (!response.ok) throw await this.#httpError(response, request);
 
 			let data: unknown;
-			if (responseType === "stream") {
+			if (state.stream) {
+				// the timeout covers the wait for the response, not the lifetime of the stream
+				releaseResponse(response);
+				data = openStream(response, request, ctx.signal, state.stream);
+			} else if (responseType === "stream") {
 				releaseResponse(response);
 				data = response.body;
 			} else {
@@ -405,15 +480,30 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 					result.data = await fn(result.data, result) as TData;
 				}
 			}
+			for (const hook of config.hooks.onSuccess) await hook(result.data, result);
+			if (state.hooks) for (const hook of state.hooks.onSuccess) await hook(result.data, result);
 			return result;
 		} finally {
 			releaseResponse(response);
 		}
 	}
 
+	async #httpError(response: Response, request: ErrorRequest): Promise<HttpError> {
+		let body: unknown;
+		try {
+			body = await decodeErrorBody(response, request);
+		} finally {
+			releaseResponse(response);
+		}
+		const schema = this.#state.errorSchemas?.[response.status] ?? this.#core.config.errors[response.status];
+		if (schema) body = await check(schema, body, "error", request);
+		return new HttpError(response.status, response.statusText, body, response.headers, response, request);
+	}
+
 	async #fail(error: unknown, ctx: RequestContext | undefined): Promise<unknown> {
 		if (error instanceof EndpointError) {
 			for (const hook of this.#core.config.hooks.onError) await hook(error, ctx);
+			if (this.#state.hooks) for (const hook of this.#state.hooks.onError) await hook(error, ctx);
 		}
 		return error;
 	}

@@ -18,6 +18,21 @@ export function releaseResponse(response: Response): void {
 	}
 }
 
+const hasSignalAny = typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function";
+
+/**
+ * Combine the user signal with the timeout controller. `AbortSignal.any` keeps the user signal
+ * wired to the response body after the timeout was released (important for streams); the fallback
+ * listener is removed on release.
+ */
+function linkSignals(user: AbortSignal | undefined, controller: AbortController): { signal: AbortSignal; dispose: () => void } {
+	if (!user) return { signal: controller.signal, dispose: () => undefined };
+	if (hasSignalAny) return { signal: AbortSignal.any([user, controller.signal]), dispose: () => undefined };
+	const onAbort = () => controller.abort(user.reason);
+	user.addEventListener("abort", onAbort, { once: true });
+	return { signal: controller.signal, dispose: () => user.removeEventListener("abort", onAbort) };
+}
+
 /** Terminal pipeline handler: performs the actual `fetch` with timeout + abort handling */
 export function createTransport(fetchImpl: FetchLike | undefined): Next {
 	return async ctx => {
@@ -51,13 +66,12 @@ export function createTransport(fetchImpl: FetchLike | undefined): Next {
 			timedOut = true;
 			controller.abort(new TimeoutError(timeout, request));
 		}, timeout);
-		const onUserAbort = () => controller.abort(userSignal!.reason);
-		userSignal?.addEventListener("abort", onUserAbort, { once: true });
+		const linked = linkSignals(userSignal, controller);
 		const cleanup = () => {
 			clearTimeout(timer);
-			userSignal?.removeEventListener("abort", onUserAbort);
+			linked.dispose();
 		};
-		init.signal = controller.signal;
+		init.signal = linked.signal;
 
 		try {
 			const response = await doFetch(ctx.url, init);

@@ -51,3 +51,24 @@ export async function readBody(body: BodyInit | null | undefined): Promise<strin
 	if (body === null || body === undefined) return "";
 	return new Response(body).text();
 }
+
+/** A streaming response delivered chunk by chunk (optionally spaced by `delayMs`) */
+export function chunked(chunks: (string | Uint8Array)[], init: ResponseInit = {}, delayMs = 0): Response {
+	const encoder = new TextEncoder();
+	let index = 0;
+	const body = new ReadableStream<Uint8Array>({
+		async pull(controller) {
+			if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+			if (index >= chunks.length) return controller.close();
+			const chunk = chunks[index++]!;
+			controller.enqueue(typeof chunk === "string" ? encoder.encode(chunk) : chunk);
+		},
+	});
+	return new Response(body, init);
+}
+
+export const sseResponse = (chunks: (string | Uint8Array)[], delayMs = 0) =>
+	chunked(chunks, { headers: { "content-type": "text/event-stream" } }, delayMs);
+
+export const ndjsonResponse = (chunks: (string | Uint8Array)[], delayMs = 0) =>
+	chunked(chunks, { headers: { "content-type": "application/x-ndjson" } }, delayMs);

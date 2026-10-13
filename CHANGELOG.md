@@ -19,7 +19,10 @@ A full redesign. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide and [d
 - Validation with any Standard Schema v1 library (zod, valibot, arktype, effect, yup) for params, query, body, response and error bodies. `schema(fn)` wraps a plain function.
 - `Endpoint` takes a single spec generic: `Endpoint<{ method; path; params; query; body; data; errors }>`.
 - Error classes: `TimeoutError`, `AbortError`, `ParseError` and the `EndpointError` base class. All errors carry a `type` discriminator.
-- Middleware pipeline and lifecycle hooks: `onRequest`, `onResponse`, `onError` and `onRetry`.
+- Lifecycle hooks `onRequest`, `onResponse`, `onSuccess`, `onError` and `onRetry`, on the client and on single requests (`request.onSuccess(...)`), plus a middleware pipeline.
+- Typed streams: `.sse(schema?, { stopOn, onInvalid })` and `.ndjson(schema, { onInvalid })` resolve with an `EventStream` of validated items. Available on requests and in contracts (`endpoint.get(...).sse(Event)`).
+- Typed endpoint headers: `endpoint.get(...).headers(schema)` makes `headers` a validated, typed input. `defaultHeaders()` sets constant headers.
+- `@cordy/endpoint-builder/testing`: `mockClient(contract, handlers)` and `mockFetch(contract, handlers)` answer a contract with typed handlers and a typed `fail(status, body)`.
 - Path params: optional params (`:id?`), OpenAPI style (`{id}`) and `:name.json`. Values are URI-encoded.
 - Configurable query serialization with `repeat`, `brackets`, `indices` or `comma` array formats, and nested objects.
 - `fetch` injection, `init` passthrough and default query params.
@@ -32,7 +35,8 @@ A full redesign. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide and [d
 - Error classes are actually thrown, so `instanceof` works.
 - Token refresh can no longer loop forever.
 - Dedupe no longer merges POSTs, uploads or requests with different headers.
-- Subpath exports (`./auth`, `./retry`, `./errors`) are now built.
+- Subpath exports (`./auth`, `./retry`, `./errors`, `./testing`) are now built.
+- A user `AbortSignal` keeps working after the response headers arrived (relevant for bodies and streams read later). The minimum Node version is now 20.3 (`AbortSignal.any`).
 - Non-idempotent methods are no longer retried by default.
 - `apiKey` sent as a query param is now actually applied.
 - `buildPath` no longer has the `:id` vs `:idx` collision, and values are encoded.

@@ -40,6 +40,11 @@
             "import": "./dist/errors.js",
             "default": "./dist/errors.js"
         },
+        "./testing": {
+            "types": "./dist/testing.d.ts",
+            "import": "./dist/testing.js",
+            "default": "./dist/testing.js"
+        },
         "./package.json": "./package.json"
     },
     "sideEffects": false,
@@ -88,7 +93,7 @@
         "*": "npm run lint:fix"
     },
     "engines": {
-        "node": ">=20.0.0"
+        "node": ">=20.3.0"
     },
     "keywords": [
         "typescript",

@@ -79,3 +79,23 @@ export function buildPath<P extends string>(template: P, params: PathParams<P> |
 export function path<P extends string>(template: P): (params: PathParams<P>) => string {
 	return params => buildPath(template, params);
 }
+
+function escapeRegex(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** @internal turn a path template into a matcher that captures the params (used by the mock server) */
+export function compilePath(template: string): { regex: RegExp; names: string[] } {
+	const names: string[] = [];
+	let source = "";
+	let last = 0;
+	for (const match of template.matchAll(PARAM_RE)) {
+		const [whole, lead, colonName, optional, braceName] = match;
+		source += escapeRegex(template.slice(last, match.index));
+		names.push((colonName ?? braceName)!);
+		source += optional ? `(?:${escapeRegex(lead ?? "")}([^/]+))?` : `${escapeRegex(lead ?? "")}([^/]+)`;
+		last = match.index + whole.length;
+	}
+	source += escapeRegex(template.slice(last));
+	return { regex: new RegExp(`^${source}/?$`), names };
+}

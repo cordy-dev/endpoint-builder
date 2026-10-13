@@ -6,6 +6,7 @@ export default defineConfig({
 		auth: "./src/auth/index.ts",
 		retry: "./src/retry/index.ts",
 		errors: "./src/errors/index.ts",
+		testing: "./src/testing/index.ts",
 	},
 	platform: "neutral",
 	dts: true,
