@@ -2,6 +2,7 @@ import { AbortError, EndpointError, NetworkError, TimeoutError } from "../errors
 import type { Next } from "../middleware";
 import type { FetchLike, RequestContext } from "../types";
 import { isStream } from "../utils/body";
+import { errorRequest } from "../utils/url";
 
 /**
  * Pending per-attempt timers keyed by response. The timeout keeps running while the body
@@ -36,7 +37,7 @@ function linkSignals(user: AbortSignal | undefined, controller: AbortController)
 /** Terminal pipeline handler: performs the actual `fetch` with timeout + abort handling */
 export function createTransport(fetchImpl: FetchLike | undefined): Next {
 	return async ctx => {
-		const request = { method: ctx.method, url: ctx.url };
+		const request = errorRequest(ctx);
 		const userSignal = ctx.signal;
 		if (userSignal?.aborted) throw new AbortError(request, userSignal.reason);
 
@@ -86,10 +87,10 @@ export function createTransport(fetchImpl: FetchLike | undefined): Next {
 }
 
 export function toTransportError(error: unknown, ctx: RequestContext, timedOut: boolean): EndpointError {
-	const request = { method: ctx.method, url: ctx.url };
+	const request = errorRequest(ctx);
 	if (timedOut) return new TimeoutError(ctx.timeout ?? 0, request);
 	if (error instanceof EndpointError) return error;
 	if (ctx.signal?.aborted) return new AbortError(request, ctx.signal.reason);
 	const message = error instanceof Error ? error.message : String(error);
-	return new NetworkError(`Network request failed: ${message} (${ctx.method} ${ctx.url})`, request, error);
+	return new NetworkError(`Network request failed: ${message} (${request.method} ${request.url})`, request, error);
 }

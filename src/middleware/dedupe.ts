@@ -1,6 +1,7 @@
 import { releaseResponse } from "../core/transport";
 import { AbortError } from "../errors";
 import type { RequestContext } from "../types";
+import { errorRequest } from "../utils/url";
 import type { Middleware, Next } from "./index";
 
 interface Inflight {
@@ -30,7 +31,7 @@ export function dedupeMiddleware(): Middleware {
 		: shared(ctx, next);
 
 	async function shared(ctx: RequestContext, next: Next): Promise<Response> {
-		if (ctx.signal?.aborted) throw new AbortError({ method: ctx.method, url: ctx.url }, ctx.signal.reason);
+		if (ctx.signal?.aborted) throw new AbortError(errorRequest(ctx), ctx.signal.reason);
 
 		const key = dedupeKey(ctx);
 		let entry = inflight.get(key);
@@ -64,7 +65,7 @@ export function dedupeMiddleware(): Middleware {
 				if (settled) return;
 				settled = true;
 				if (--current.waiters === 0) current.controller.abort(signal?.reason);
-				reject(new AbortError({ method: ctx.method, url: ctx.url }, signal?.reason));
+				reject(new AbortError(errorRequest(ctx), signal?.reason));
 			};
 			if (signal?.aborted) return onAbort();
 			signal?.addEventListener("abort", onAbort, { once: true });

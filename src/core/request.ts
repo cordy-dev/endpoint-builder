@@ -11,7 +11,7 @@ import { decodeBody, decodeErrorBody } from "../utils/decode";
 import { applyHeaders, headersFromRecord } from "../utils/headers";
 import { buildPath } from "../utils/path";
 import { appendQuery, serializeQuery } from "../utils/query";
-import { joinUrl } from "../utils/url";
+import { errorRequest, joinUrl } from "../utils/url";
 import type { ClientConfig, Unwrap } from "./config";
 import { releaseResponse, toTransportError } from "./transport";
 
@@ -412,7 +412,7 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 		let body: BodyInit | undefined;
 		if (state.hasBody) {
 			let value = state.body;
-			if (state.bodySchema) value = await check(state.bodySchema, value, "body", { method: state.method, url });
+			if (state.bodySchema) value = await check(state.bodySchema, value, "body", errorRequest({ method: state.method, url }));
 			body = encodeBody(value, state.bodyKind ?? "auto", headers);
 		}
 
@@ -437,7 +437,7 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 	async #handle(response: Response, ctx: RequestContext): Promise<HttpResponse<TData>> {
 		const { config } = this.#core;
 		const state = this.#state;
-		const request: ErrorRequest = { method: ctx.method, url: ctx.url };
+		const request: ErrorRequest = errorRequest(ctx);
 		const responseType = state.responseType ?? config.responseType;
 
 		try {

@@ -30,6 +30,7 @@ A full redesign. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide and [d
 
 ### Fixed
 
+- Credentials in the query string (`apiKey(key, { query })` or `token=...` passed by the caller) no longer leak into error messages and `error.request.url`; they are masked as `***`.
 - Timeouts and abort signals are now applied. The timeout also covers reading the body.
 - Network errors are retried and thrown as `NetworkError`.
 - Error classes are actually thrown, so `instanceof` works.

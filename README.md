@@ -152,7 +152,7 @@ const native = await api.get("/x").raw(); // native Response, no status check
 
 ## Validation
 
-Every schema slot takes a **[Standard Schema](https://standardschema.dev)**: zod ≥ 3.24, valibot ≥ 1, arktype ≥ 2, effect/schema, yup ≥ 1.7, …
+Every schema slot takes a **[Standard Schema](https://standardschema.dev)**. Tested with zod 4, valibot 1 and arktype 2; any other Standard Schema library (effect/schema, yup ≥ 1.7, …) should work the same way.
 
 The input type is inferred from the schema input and the data type from the schema output, so transforms and coercions are typed correctly. Sync validators run synchronously, without an extra await.
 
@@ -265,6 +265,8 @@ if (isHttpError(error, 404)) {
   data;                  // User
 }
 ```
+
+Credential-like query parameters (`api_key`, `token`, `signature`, …) are masked as `***` in `error.message` and `error.request.url`, so errors are safe to log or hand to an LLM.
 
 `safe()` only catches library errors. Bugs in your own code, such as an exception inside `map()`, are still thrown.
 
