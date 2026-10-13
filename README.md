@@ -12,6 +12,7 @@ Type-safe HTTP client for TypeScript, built on native `fetch`. It has zero depen
 - **Typed streams.** Server-Sent Events and NDJSON arrive as an async iterable of validated items.
 - **Test without a network.** `mockClient(contract, handlers)` answers your contract with typed handlers, through the real client.
 - **Errors you can check.** Each failure has its own class: `HttpError<404, NotFound>`, `NetworkError`, `TimeoutError`, `AbortError`, `ValidationError` and `ParseError`. They share a `type` discriminator, and `.safe()` returns them as a `Result`.
+- **Built for unattended callers** such as agents and workers: `.idempotent()` for safe POST retries, `concurrency` and `rateLimit` queues, `maxResponseBytes`, and credentials masked in errors.
 - **Reliable defaults:**
   - Per-attempt timeouts that also cover a slow body.
   - Retries only idempotent methods by default, with backoff, jitter and `Retry-After`.
@@ -84,7 +85,7 @@ const api = Client.builder("https://api.example.com")
 | `headers` | `{}` | Default headers |
 | `query` | — | Default query params, merged with the request query |
 | `timeout` | `30_000` | Per-attempt timeout in ms (`false` = none) |
-| `retry` | `{}` | `RetryOptions`, a number (limit) or `false` |
+| `retry` | `{}` | `RetryInput`: a `RetryOptions` object, a number (limit) or `false` |
 | `auth` | `false` | `AuthStrategy` or a bearer token string |
 | `dedupe` | `false` | Collapse identical concurrent GET/HEAD requests |
 | `fetch` | `globalThis.fetch` | Custom fetch (tests, SSR, proxies) |
@@ -237,6 +238,16 @@ const { data: stream, error } = await api.chat({ query }).safe();
 - `break` or `stream.cancel()` closes the connection. A user `AbortSignal` cancels the stream, which then throws `AbortError`. A dropped connection throws `NetworkError`.
 - The `timeout` covers the wait for the response, not the lifetime of the stream.
 - A stream is read once. Each `await` of the request opens a new connection, and streams are never deduped.
+- `maxResponseBytes` does not apply to streams. To bound one, stop reading with `break`, `stopOn` or an `AbortSignal`.
+
+To expose a stream from your own function, wrap it in an async generator. `yield*` forwards the values and closes the connection when the consumer stops early:
+
+```ts
+async function* events(signal?: AbortSignal) {
+  const stream = await api.get("/chat").signal(signal).sse(ChatEvent);
+  yield* stream;
+}
+```
 
 ## Errors and `.safe()`
 
@@ -250,6 +261,7 @@ Every error extends `EndpointError` and has a `type` discriminator:
 | `AbortError` | `abort` | Your `AbortSignal` fired |
 | `ValidationError` | `validation` | A schema rejected `params` / `query` / `body` / `response` / `error` |
 | `ParseError` | `parse` | Malformed JSON body |
+| `SizeLimitError` | `size` | The body is larger than `maxResponseBytes` |
 
 ```ts
 const { data, error } = await api.users.get({ params: { id } }).safe();
@@ -289,7 +301,37 @@ createClient({
 api.post("/payments").retry({ methods: ["POST"], limit: 5 }); // opt in per request
 ```
 
+`retry: false` is a valid value that turns retries off. When you wrap the client options, test for `!== undefined`, not for truthiness.
+
 Backoff sleeps can be aborted. Bodies of failed attempts are discarded, so keep-alive sockets are released. Stream bodies are never replayed.
+
+### Safe retries of POST and PATCH
+
+`.idempotent()` sends an `Idempotency-Key` header and lets the retry policy retry this request even though POST is not idempotent. A new key is created for every call (every `await`, including each call of a contract endpoint). Only the retries of that call share it, so the server can de-duplicate them without ever merging two separate calls:
+
+```ts
+await api.post("/payments", { json: payment }).idempotent();                      // random UUID key
+await api.post("/payments", { json: payment }).idempotent("order-42");            // your own key
+await api.post("/payments", { json: payment }).idempotent({ header: "X-Idempotency-Key" });
+endpoint.post("/payments").idempotent()                                           // in a contract
+```
+
+## Limits
+
+```ts
+createClient({
+  concurrency: 4,                          // at most 4 requests waiting for response headers at a time
+  rateLimit: { requests: 10, per: 1000 },  // at most 10 requests started per second (sliding window)
+  maxResponseBytes: 5_000_000,             // bigger bodies fail with SizeLimitError
+});
+
+await api.get("/export").maxResponseBytes(50_000_000);  // raise it for one request, or `false` to lift it
+```
+
+- Requests over the limit wait in a FIFO queue. Aborting a queued request removes it without touching the network.
+- Retries count against the limits too, so a retry storm cannot exceed the rate. Derived clients (`api.with(...)`) share the queue unless you change `concurrency` or `rateLimit`.
+- `concurrency` counts requests until their response headers arrive. Bodies and streams read later are not counted.
+- `maxResponseBytes` rejects a body announced as too large (`Content-Length`) without reading it, and stops reading as soon as a chunked body passes the limit. Huge **error** bodies are truncated instead of rejected. Streams (`sse`, `ndjson`, `stream()`) and `raw()` are not limited.
 
 ## Authentication
 
@@ -373,14 +415,35 @@ const api = mockClient(contract, {
 await api.users.get({ params: { id: 1 } }); // { id: 1, name: "Ann" }
 ```
 
-- Handlers receive `{ params, query, headers, body }` as they arrive on the wire (`params` and `query` are strings) and a typed `fail(status, body)`.
+- Handlers receive `{ params, query, headers, body }` as they arrive on the wire (`params` and `query` are strings, `headers` is a native `Headers`) and a typed `fail(status, body)`.
+- Routes are matched by method and path. Static paths win over parameterized ones, so `/todos/stream` is never taken for `/todos/:id`.
 - Endpoints without a handler answer `501` with `[mock] no handler for GET /users/1`.
-- Retries and the timeout are off by default. Pass client options as the third argument: `mockClient(contract, handlers, { auth, errors })`.
-- To test a client you configured yourself, inject `mockFetch(contract, handlers)` with `createClient({ fetch })`.
+- `mockClient` has retries and the timeout off. Pass client options as the third argument: `mockClient(contract, handlers, { auth, errors })`.
+- To test a client you configured yourself, inject `mockFetch(contract, handlers)` with `createClient({ fetch })`. That client keeps its own retry policy, so set `retry: { delay: 0 }` to keep tests fast.
+
+Simulate a transient failure with `fail(503)` (the body is optional for statuses you did not declare). This checks that a retried POST carries the same `Idempotency-Key`:
+
+```ts
+let calls = 0;
+const fetch = mockFetch(contract, {
+  create: ({ headers }, { fail }) => (++calls === 1 ? fail(503) : { id: 1, title: "x", done: false }),
+});
+const api = createClient({ baseUrl: "http://mock.test", fetch, retry: { delay: 0 } }).api(contract);
+await api.create({ body: { title: "x" } }); // `create` is declared with .idempotent(); the retry reuses its key
+```
 
 ## Result helpers
 
 `ok`, `err`, `isOk`, `isErr`, `unwrap`, `unwrapOr`, `mapResult`, `mapError`.
+
+## For AI coding assistants
+
+The package ships two plain-text files next to the code, so an assistant can read them from `node_modules/@cordy/endpoint-builder/`:
+
+- `llms.txt`: the rules for writing code with this library, the common mistakes, and links.
+- `llms-full.txt`: the whole documentation in one file, for pasting into a context window.
+
+Point your assistant at them, or copy the rules from `llms.txt` into your project's `AGENTS.md` / `CLAUDE.md`. If you work on this repository itself, see `AGENTS.md`.
 
 ## Migrating from 1.x
 

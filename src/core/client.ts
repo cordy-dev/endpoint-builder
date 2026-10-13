@@ -4,6 +4,7 @@ import { bindContract, type BoundContract, type Contract } from "../contract";
 import type { ErrorMap } from "../errors";
 import { compose, type Middleware, type Next } from "../middleware";
 import { dedupeMiddleware } from "../middleware/dedupe";
+import { createLimiter, limitMiddleware, type RateLimit } from "../middleware/limit";
 import { mergeRetry, normalizeRetry, type RetryInput, retryMiddleware } from "../retry";
 import type { HeadersInput, HttpMethod, QueryInput, QueryObject, RequestContext, RequestInitExtras, ResponseType } from "../types";
 import { toHeaderRecord } from "../utils/headers";
@@ -55,6 +56,12 @@ export interface ClientOptions<TErrorSchemas extends ErrorSchemas = ErrorSchemas
 	init?: RequestInitExtras;
 	/** Default response reading mode (default `auto`) */
 	responseType?: ResponseType;
+	/** Reject bodies larger than this many bytes with a `SizeLimitError` (not applied to streams and `raw()`) */
+	maxResponseBytes?: number;
+	/** Max requests waiting for response headers at the same time; the rest queue up */
+	concurrency?: number;
+	/** Max requests started per time window, e.g. `{ requests: 10, per: 1000 }`; the rest queue up */
+	rateLimit?: RateLimit;
 }
 
 const EMPTY_HOOKS: Hooks = { onRequest: [], onResponse: [], onSuccess: [], onError: [], onRetry: [] };
@@ -75,6 +82,10 @@ const DEFAULT_CONFIG: ClientConfig = {
 	errors: {},
 	init: {},
 	responseType: "auto",
+	maxResponseBytes: undefined,
+	concurrency: undefined,
+	rateLimit: undefined,
+	limiter: undefined,
 };
 
 function many<T>(value: OneOrMany<T> | undefined): readonly T[] {
@@ -94,6 +105,9 @@ function applyOptions(base: ClientConfig, options: ClientOptions): ClientConfig 
 		onError: [...base.hooks.onError, ...many(options.onError)],
 		onRetry: [...base.hooks.onRetry, ...many(options.onRetry)],
 	};
+	const concurrency = options.concurrency ?? base.concurrency;
+	const rateLimit = options.rateLimit ?? base.rateLimit;
+	const limitsChanged = options.concurrency !== undefined || options.rateLimit !== undefined;
 	return {
 		baseUrl: options.baseUrl ?? base.baseUrl,
 		headers: options.headers ? { ...base.headers, ...toHeaderRecord(options.headers) } : base.headers,
@@ -112,6 +126,10 @@ function applyOptions(base: ClientConfig, options: ClientOptions): ClientConfig 
 		errors: options.errors ? { ...base.errors, ...options.errors } : base.errors,
 		init: options.init ? { ...base.init, ...options.init } : base.init,
 		responseType: options.responseType ?? base.responseType,
+		maxResponseBytes: options.maxResponseBytes ?? base.maxResponseBytes,
+		concurrency,
+		rateLimit,
+		limiter: limitsChanged ? createLimiter({ concurrency, rateLimit }) : base.limiter,
 	};
 }
 
@@ -170,6 +188,18 @@ export class ClientBuilder<TErrors extends ErrorMap = {}> {
 
 	auth(auth: AuthStrategy | string | false): ClientBuilder<TErrors> {
 		return this.#with({ auth });
+	}
+
+	maxResponseBytes(bytes: number): ClientBuilder<TErrors> {
+		return this.#with({ maxResponseBytes: bytes });
+	}
+
+	concurrency(max: number): ClientBuilder<TErrors> {
+		return this.#with({ concurrency: max });
+	}
+
+	rateLimit(limit: RateLimit): ClientBuilder<TErrors> {
+		return this.#with({ rateLimit: limit });
 	}
 
 	dedupe(enabled = true): ClientBuilder<TErrors> {
@@ -279,6 +309,7 @@ export class Client<TErrors extends ErrorMap = {}> {
 		const { hooks } = config;
 		const layers: Middleware[] = [];
 		layers.push(hooksMiddleware(hooks), dedupeMiddleware(), ...config.middleware, retryMiddleware(hooks.onRetry), authMiddleware());
+		if (config.limiter) layers.push(limitMiddleware(config.limiter)); // innermost: counts every network attempt
 		this.#core = { config, pipeline: compose(layers, createTransport(config.fetch)) };
 	}
 

@@ -169,6 +169,28 @@ describe("abort & timeout", () => {
 	});
 });
 
+describe("wrapping a stream in your own generator (README example)", () => {
+	it("yield* forwards values and closes the connection when the consumer stops early", async () => {
+		const cancelled = vi.fn();
+		const body = new ReadableStream<Uint8Array>({
+			pull(controller) { controller.enqueue(new TextEncoder().encode("data: {\"type\":\"tick\"}\n\n")); },
+			cancel: cancelled,
+		});
+		const api = createClient({ baseUrl: base, fetch: () => Promise.resolve(new Response(body, { headers: { "content-type": "text/event-stream" } })) });
+
+		async function* events(signal?: AbortSignal) {
+			const stream = await api.get("/x").signal(signal).sse(Chat);
+			yield* stream;
+		}
+
+		let count = 0;
+		for await (const _event of events()) {
+			if (++count === 3) break;
+		}
+		expect(cancelled).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe("ndjson", () => {
 	it("yields validated lines across chunk boundaries and skips blank lines", async () => {
 		const fetch = mockFetch(() => ndjsonResponse(["{\"type\":\"a\"}\n\n{\"ty", "pe\":\"b\"}\n", "{\"type\":\"c\"}"]));

@@ -162,6 +162,42 @@ describe("mockClient", () => {
 	});
 });
 
+describe("testing retries (README example)", () => {
+	const payments = defineContract({
+		create: endpoint.post("/payments").body(z.object({ title: z.string() })).returns(User).idempotent(),
+	});
+
+	it("fail(503) simulates a transient failure; the retry carries the same Idempotency-Key", async () => {
+		const keys: (string | null)[] = [];
+		let calls = 0;
+		const fetch = mockFetch(payments, {
+			create: ({ headers }, { fail }) => {
+				keys.push(headers.get("idempotency-key"));
+				return ++calls === 1 ? fail(503) : { id: 1, name: "x" };
+			},
+		});
+		const api = createClient({ baseUrl: "http://mock.test", fetch, retry: { delay: 0 } }).api(payments);
+		expect(await api.create({ body: { title: "x" } })).toEqual({ id: 1, name: "x" });
+		expect(calls).toBe(2);
+		expect(keys[0]).toBeTruthy();
+		expect(keys[0]).toBe(keys[1]);
+	});
+
+	it("static paths win over parameterized ones in mockFetch too, and headers is a native Headers", async () => {
+		const routes = defineContract({
+			one: endpoint.get("/todos/:id").as<string>(),
+			stream: endpoint.get("/todos/stream").as<string>(),
+		});
+		const fetch = mockFetch(routes, {
+			one: ({ params, headers }) => { expectTypeOf(headers).toEqualTypeOf<Headers>(); return `one:${params.id}`; },
+			stream: () => "stream",
+		});
+		const api = createClient({ baseUrl: "http://mock.test", fetch }).api(routes);
+		expect(await api.stream()).toBe("stream");
+		expect(await api.one({ params: { id: 7 } })).toBe("one:7");
+	});
+});
+
 describe("mockFetch", () => {
 	it("lets you test a fully configured client", async () => {
 		const fetch = mockFetch(contract, { users: { get: ({ headers }) => ({ id: 1, name: headers.get("x-app") ?? "" }) } }, { baseUrl: "https://api.test" });

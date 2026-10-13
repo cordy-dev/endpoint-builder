@@ -1,14 +1,16 @@
 import type { AuthStrategy } from "../auth/types";
-import { type ApiError, EndpointError, type ErrorMap, type ErrorRequest, HttpError, ValidationError, type ValidationStage } from "../errors";
+import { type ApiError, EndpointError, type ErrorMap, type ErrorRequest, HttpError, SizeLimitError, ValidationError, type ValidationStage } from "../errors";
 import type { Next } from "../middleware";
 import { err, ok, type Result } from "../result";
-import { mergeRetry, type RetryInput } from "../retry";
+import { IDEMPOTENT_METHODS, mergeRetry, type RetryInput } from "../retry";
 import { type InferInput, type InferOutput, type Schema, validate } from "../schema";
 import { EventStream, type NdjsonOptions, openStream, type SseMessage, type SseOptions, type StreamSpec } from "../stream";
 import type { HeadersInput, HttpMethod, HttpResponse, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, QueryInput, RequestContext, RequestInitExtras, ResponseType, Simplify } from "../types";
 import { type FormInput, isNativeBody, toFormData, toUrlEncoded } from "../utils/body";
-import { decodeBody, decodeErrorBody } from "../utils/decode";
+import { readBounded, withBytes } from "../utils/bounded";
+import { decodeBody, decodeErrorBody, isBodyless } from "../utils/decode";
 import { applyHeaders, headersFromRecord } from "../utils/headers";
+import { randomId } from "../utils/id";
 import { buildPath } from "../utils/path";
 import { appendQuery, serializeQuery } from "../utils/query";
 import { errorRequest, joinUrl } from "../utils/url";
@@ -22,6 +24,13 @@ export type InferErrors<M> = { [K in keyof M]: InferOutput<M[K]> };
 export type MergeErrors<A, B> = Simplify<Omit<A, keyof B> & B>;
 
 type BodyKind = "auto" | "json" | "form" | "multipart";
+
+export interface IdempotentOptions {
+	/** The key to send (default: a random UUID, the same for every attempt of the request) */
+	key?: string;
+	/** Header name (default `Idempotency-Key`) */
+	header?: string;
+}
 type MapFn = (data: any, response: HttpResponse<any>) => unknown;
 
 /** @internal what a request needs from its client */
@@ -48,6 +57,8 @@ export interface RequestState {
 	readonly headersSchema?: Schema | undefined;
 	readonly hooks?: StateHooks | undefined;
 	readonly stream?: StreamSpec | undefined;
+	readonly idempotent?: true | string | IdempotentOptions | undefined;
+	readonly maxResponseBytes?: number | false | undefined;
 	readonly timeout?: number | false | undefined;
 	readonly retry?: RetryInput | undefined;
 	readonly auth?: AuthStrategy | false | undefined;
@@ -187,6 +198,20 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 	/** Override authentication (`false` = anonymous request) */
 	auth(auth: AuthStrategy | false): RequestBuilder<TData, TErrors> {
 		return this.#with({ auth });
+	}
+
+	/**
+	 * Make this request safe to retry: sends an `Idempotency-Key` header and lets the retry policy
+	 * retry this method even if it is not idempotent (POST, PATCH). A new key is created for every
+	 * send (every `await`); only the retries of that send share it.
+	 */
+	idempotent(options?: string | IdempotentOptions): RequestBuilder<TData, TErrors> {
+		return this.#with({ idempotent: options ?? true });
+	}
+
+	/** Reject a body larger than `bytes` with a `SizeLimitError` (`false` lifts the client limit) */
+	maxResponseBytes(bytes: number | false): RequestBuilder<TData, TErrors> {
+		return this.#with({ maxResponseBytes: bytes });
 	}
 
 	/** Share one network call between identical concurrent GET/HEAD requests */
@@ -416,6 +441,17 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 			body = encodeBody(value, state.bodyKind ?? "auto", headers);
 		}
 
+		let retry = mergeRetry(config.retry, state.retry);
+		if (state.idempotent) {
+			const options = state.idempotent === true ? {} : typeof state.idempotent === "string" ? { key: state.idempotent } : state.idempotent;
+			const header = options.header ?? "idempotency-key";
+			if (!headers.has(header)) headers.set(header, options.key ?? randomId());
+			if (retry) {
+				const methods = retry.methods ?? IDEMPOTENT_METHODS;
+				if (!methods.includes(state.method)) retry = { ...retry, methods: [...methods, state.method] };
+			}
+		}
+
 		const timeout = state.timeout === false ? undefined : state.timeout ?? config.timeout;
 		return {
 			url,
@@ -424,7 +460,7 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 			body,
 			signal: state.signal,
 			timeout,
-			retry: mergeRetry(config.retry, state.retry),
+			retry,
 			auth: state.auth ?? config.auth,
 			dedupe: state.stream ? false : state.dedupe ?? config.dedupe,
 			init: state.init ? { ...config.init, ...state.init } : config.init,
@@ -439,9 +475,10 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 		const state = this.#state;
 		const request: ErrorRequest = errorRequest(ctx);
 		const responseType = state.responseType ?? config.responseType;
+		const maxBytes = state.maxResponseBytes === false ? undefined : state.maxResponseBytes ?? config.maxResponseBytes;
 
 		try {
-			if (!response.ok) throw await this.#httpError(response, request);
+			if (!response.ok) throw await this.#httpError(response, request, maxBytes);
 
 			let data: unknown;
 			if (state.stream) {
@@ -453,7 +490,13 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 				data = response.body;
 			} else {
 				try {
-					data = await decodeBody(response, responseType, request);
+					let source = response;
+					if (maxBytes !== undefined && !isBodyless(response, ctx.method)) {
+						const body = await readBounded(response, maxBytes);
+						if (body.truncated) throw new SizeLimitError(maxBytes, request, body.declared);
+						source = withBytes(response, body.bytes);
+					}
+					data = await decodeBody(source, responseType, request);
 				} catch (error) {
 					throw toTransportError(error, ctx, false);
 				} finally {
@@ -488,10 +531,16 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 		}
 	}
 
-	async #httpError(response: Response, request: ErrorRequest): Promise<HttpError> {
+	async #httpError(response: Response, request: ErrorRequest, maxBytes: number | undefined): Promise<HttpError> {
 		let body: unknown;
 		try {
-			body = await decodeErrorBody(response, request);
+			let source = response;
+			if (maxBytes !== undefined && !isBodyless(response, request.method)) {
+				// error bodies are only truncated, never rejected: the status code matters more
+				const bounded = await readBounded(response, maxBytes).catch(() => undefined);
+				source = withBytes(response, bounded?.bytes ?? new Uint8Array(0));
+			}
+			body = await decodeErrorBody(source, request);
 		} finally {
 			releaseResponse(response);
 		}

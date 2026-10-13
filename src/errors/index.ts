@@ -7,7 +7,7 @@ export interface ErrorRequest {
 	readonly url: string;
 }
 
-export type ErrorType = "http" | "network" | "timeout" | "abort" | "validation" | "parse";
+export type ErrorType = "http" | "network" | "timeout" | "abort" | "validation" | "parse" | "size";
 
 /** Base class of every error thrown by the library */
 export abstract class EndpointError extends Error {
@@ -100,6 +100,19 @@ export class ParseError extends EndpointError {
 	}
 }
 
+/** The response body is larger than `maxResponseBytes` */
+export class SizeLimitError extends EndpointError {
+	readonly type = "size" as const;
+	override readonly name = "SizeLimitError";
+
+	constructor(readonly limit: number, request: ErrorRequest | undefined, readonly declared?: number) {
+		super(
+			`Response body exceeds ${limit} bytes${declared === undefined ? "" : ` (Content-Length: ${declared})`}${request ? ` (${request.method} ${request.url})` : ""}`,
+			request,
+		);
+	}
+}
+
 /** Map of status code → error body type, e.g. `{ 404: NotFound; 422: Problem }` */
 export type ErrorMap = Record<number, unknown>;
 
@@ -116,7 +129,8 @@ export type ApiError<TErrors extends ErrorMap = {}> =
 	| TimeoutError
 	| AbortError
 	| ValidationError
-	| ParseError;
+	| ParseError
+	| SizeLimitError;
 
 type HttpErrorFor<E, S extends number> =
 	[Extract<E, HttpError<S, any>>] extends [never] ? HttpError<S, unknown> : Extract<E, HttpError<S, any>>;

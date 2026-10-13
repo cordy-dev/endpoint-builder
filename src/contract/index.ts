@@ -1,5 +1,5 @@
 import type { AuthStrategy } from "../auth/types";
-import { type ClientCore, type ErrorSchemas, type InferErrors, type MergeErrors, RequestBuilder, type RequestState } from "../core/request";
+import { type ClientCore, type ErrorSchemas, type IdempotentOptions, type InferErrors, type MergeErrors, RequestBuilder, type RequestState } from "../core/request";
 import type { ErrorMap } from "../errors";
 import type { RetryInput } from "../retry";
 import type { InferInput, InferOutput, Schema } from "../schema";
@@ -27,6 +27,8 @@ export interface EndpointDefinition {
 	readonly headersSchema?: Schema;
 	readonly defaultHeaders?: readonly HeadersInput[];
 	readonly stream?: StreamSpec;
+	readonly idempotent?: true | string | IdempotentOptions;
+	readonly maxResponseBytes?: number | false;
 	readonly timeout?: number | false;
 	readonly retry?: RetryInput;
 	readonly auth?: AuthStrategy | false;
@@ -156,6 +158,18 @@ export class Endpoint<S extends EndpointSpec = EndpointSpec> {
 		return this.#with({ auth });
 	}
 
+	/**
+	 * Send an `Idempotency-Key` and allow retrying this endpoint's method. A new key is created for
+	 * every call of the bound endpoint; only the retries of that call share it (see `RequestBuilder.idempotent`).
+	 */
+	idempotent(options?: string | IdempotentOptions): this {
+		return this.#with({ idempotent: options ?? true });
+	}
+
+	maxResponseBytes(bytes: number | false): this {
+		return this.#with({ maxResponseBytes: bytes });
+	}
+
 	dedupe(enabled = true): this {
 		return this.#with({ dedupe: enabled });
 	}
@@ -270,6 +284,8 @@ export function createEndpointRequest(core: ClientCore, def: EndpointDefinition,
 		headersInput: typedHeaders ? input.headers : undefined,
 		headersSchema: def.headersSchema,
 		stream: def.stream,
+		idempotent: def.idempotent,
+		maxResponseBytes: def.maxResponseBytes,
 		timeout: input.timeout ?? def.timeout,
 		retry: def.retry,
 		auth: def.auth,

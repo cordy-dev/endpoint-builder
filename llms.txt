@@ -1,0 +1,43 @@
+# @cordy/endpoint-builder
+
+> Type-safe HTTP client for TypeScript on native `fetch`, with zero dependencies. Path params, query, headers, body, response and error bodies are typed from the URL string and from Standard Schema validators (zod, valibot, arktype). Requests are immutable and lazy. Includes typed endpoint contracts, retries, auth refresh, SSE/NDJSON streams, rate limits and mocks for tests. ESM only, Node >= 20.3.
+
+## Rules for code that uses this library
+
+- Create **one** client and reuse it: `const api = createClient({ baseUrl, auth, ... })`. Derive variants with `api.with({ headers })`. Never build a client per request. Bind a contract of `endpoint.*` definitions with `api.api(contract)`.
+- Put dynamic values in `params` and `query`, never in string concatenation: `api.get("/users/:id", { params: { id } })`. Param names are typed from the path string.
+- Validate everything that comes from outside with `.returns(Schema)`. `.as<T>()` only casts the type and checks nothing. Use `schema(fn)` to wrap a plain validation function.
+- Requests are **lazy and immutable**. Nothing is sent until you `await` (or call `.send()`, `.safe()`, `.raw()`), and awaiting twice sends twice. Every builder method returns a **new** builder, so `req.header("x", "1");` on its own does nothing. Use the return value.
+- Handle expected failures with `.safe()`, which returns `{ data, error }`. Narrow with `isHttpError(error, 404)` or `error.type` (`http`, `network`, `timeout`, `abort`, `validation`, `parse`, `size`). `.safe()` only catches library errors; bugs in your own code still throw.
+- Declare error bodies with `.errors({ 404: NotFound })` (or the client option `errors`). Then `error.body` is typed. Read error payloads from `error.body`, not from `error.response`, whose body is already consumed.
+- Bodies: `{ json }`, `.json(value, Schema)`, `.form()`, `.multipart()`, or `.body()` for native bodies. Do not set `Content-Type` yourself.
+- Retries are on by default, **idempotent methods only**. For POST or PATCH use `.idempotent()` (also on contract endpoints): it sends an `Idempotency-Key` header and makes the request retryable. A new key is created for every call, and only that call's retries share it. Do not widen `retry.methods` for that.
+- `retry` takes a `RetryInput`: an options object, a number or `false`. `false` is a real value; when wrapping client options test `!== undefined`, not truthiness.
+- `timeout` is per attempt (default 30 s). `.timeout(false)` disables it. Cancel with `.signal(controller.signal)`.
+- Streams: `const stream = await api.get("/chat").sse(Schema)`, then `for await (const event of stream)`. The `await` before the loop is required: it resolves after the status check.
+- Auth: `bearer`, `apiKey`, `basic`, `refreshable`. Pass tokens as getters, `bearer(() => store.token)`, instead of rebuilding the client. `refreshable` shares one refresh between concurrent 401s.
+- Observe with hooks (`onRequest`, `onResponse`, `onSuccess`, `onError`, `onRetry`) on the client or on one request. Wrap calls (timing, caching) with `middleware`. Register `onSuccess` after `returns()` / `map()` so the data has its final type.
+- Protect unattended callers: `concurrency`, `rateLimit: { requests, per }` and `maxResponseBytes` (streams are not covered; stop them with `break`, `stopOn` or a signal). Credential-like query params (`api_key`, `token`, ...) are already masked as `***` in error messages and `error.request.url`.
+- In tests use `mockClient(contract, handlers)` from `@cordy/endpoint-builder/testing`, or inject `mockFetch(contract, handlers)` with `createClient({ fetch })` to test a client you configured. Do not stub the global `fetch` by hand. Handlers get `{ params, query, headers, body }` and a typed `fail(status, body)`; `fail(503)` simulates a transient failure.
+
+## Common mistakes
+
+- Forgetting `await` before `for await` on a stream.
+- Using `.as<T>()` for API responses instead of `.returns(Schema)`.
+- Calling a builder method and ignoring its result.
+- Checking `error.message` text instead of `error.type` or `isHttpError(error, status)`.
+- Parsing the body by hand (`JSON.parse(await res.text())`). The client already decodes by `Content-Type`.
+- Retrying POST by hand in a loop. Use `.idempotent()`.
+
+## Docs
+
+- [README](README.md): the API with examples.
+- [Full documentation in one file](llms-full.txt): README and migration guide, for pasting into a context window.
+- [Migration from 1.x](MIGRATION.md): what changed and why.
+- [Changelog](CHANGELOG.md)
+
+## Entry points
+
+- `@cordy/endpoint-builder`: `createClient`, `endpoint`, `defineContract`, `schema`, `isHttpError`, auth helpers, error classes.
+- `@cordy/endpoint-builder/auth`, `/retry`, `/errors`: focused re-exports.
+- `@cordy/endpoint-builder/testing`: `mockClient`, `mockFetch`.

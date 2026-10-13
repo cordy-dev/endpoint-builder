@@ -2,7 +2,7 @@
 export type { BodyOptions, ClientOptions, RequestOptions } from "./core/client";
 export { Client, ClientBuilder, createClient } from "./core/client";
 export type { ClientConfig, Hooks, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, Unwrap } from "./core/config";
-export type { ErrorSchemas, InferErrors, MergeErrors } from "./core/request";
+export type { ErrorSchemas, IdempotentOptions, InferErrors, MergeErrors } from "./core/request";
 export { RequestBuilder } from "./core/request";
 
 // Contracts
@@ -33,6 +33,7 @@ export { computeDelay, IDEMPOTENT_METHODS, RETRY_STATUS_CODES } from "./retry";
 // Middleware
 export type { Middleware, Next } from "./middleware";
 export { compose } from "./middleware";
+export type { RateLimit } from "./middleware/limit";
 
 // Errors
 export type { ApiError, DeclaredHttpError, ErrorMap, ErrorRequest, ErrorType, ValidationStage } from "./errors";
@@ -43,6 +44,7 @@ export {
 	isHttpError,
 	NetworkError,
 	ParseError,
+	SizeLimitError,
 	TimeoutError,
 	ValidationError,
 } from "./errors";

@@ -14,7 +14,9 @@
     },
     "author": "Anton Ryuben <developer@myraxbyte.dev>",
     "files": [
-        "dist"
+        "dist",
+        "llms.txt",
+        "llms-full.txt"
     ],
     "main": "./dist/index.js",
     "module": "./dist/index.js",
@@ -57,6 +59,7 @@
         "dev": "tsdown --watch",
         "test": "vitest run --reporter=verbose",
         "typecheck": "tsc --noEmit",
+        "docs:llms": "tsx scripts/build-llms.ts",
         "release": "bumpp && npm publish",
         "prepublishOnly": "npm run build",
         "lint": "eslint",

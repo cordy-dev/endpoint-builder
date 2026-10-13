@@ -1,5 +1,6 @@
 import type { AuthStrategy } from "../auth/types";
 import type { Middleware } from "../middleware";
+import type { Limiter, RateLimit } from "../middleware/limit";
 import type { RetryOptions } from "../retry";
 import type { Schema } from "../schema";
 import type { FetchLike, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, QueryObject, RequestInitExtras, ResponseType } from "../types";
@@ -34,4 +35,9 @@ export interface ClientConfig {
 	readonly errors: Readonly<Record<number, Schema>>;
 	readonly init: RequestInitExtras;
 	readonly responseType: ResponseType;
+	readonly maxResponseBytes: number | undefined;
+	readonly concurrency: number | undefined;
+	readonly rateLimit: RateLimit | undefined;
+	/** Shared by derived clients unless `concurrency` / `rateLimit` change */
+	readonly limiter: Limiter | undefined;
 }
