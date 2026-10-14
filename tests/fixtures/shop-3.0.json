@@ -1,0 +1,175 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Shop API", "version": "1.2.0", "description": "Demo shop used by the generator tests" },
+  "servers": [{ "url": "https://{env}.shop.test/v1", "variables": { "env": { "default": "api" } } }],
+  "tags": [{ "name": "pets" }, { "name": "store" }],
+  "paths": {
+    "/pets": {
+      "parameters": [{ "$ref": "#/components/parameters/TraceId" }],
+      "get": {
+        "tags": ["pets"],
+        "operationId": "listPets",
+        "summary": "List pets",
+        "description": "Returns pets, newest first.",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "status", "in": "query", "schema": { "type": "array", "items": { "$ref": "#/components/schemas/PetStatus" } } },
+          { "name": "Authorization", "in": "header", "schema": { "type": "string" } },
+          { "name": "X-Tenant", "in": "header", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of pets",
+            "headers": { "X-Total-Count": { "description": "All pets", "schema": { "type": "integer" } } },
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Pet" } } } }
+          },
+          "default": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "post": {
+        "tags": ["pets"],
+        "operationId": "createPet",
+        "requestBody": { "$ref": "#/components/requestBodies/PetBody" },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Pet" } } } },
+          "422": { "description": "Invalid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ValidationProblem" } } } },
+          "default": { "$ref": "#/components/responses/Problem" }
+        },
+        "callbacks": {
+          "onAdopted": {
+            "{$request.body#/callbackUrl}": {
+              "post": {
+                "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdoptionEvent" } } } },
+                "responses": { "200": { "description": "Acknowledged" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pets/{petId}": {
+      "get": {
+        "tags": ["pets"],
+        "operationId": "getPet",
+        "parameters": [{ "name": "petId", "in": "path", "required": true, "schema": { "type": "integer", "format": "int64" } }],
+        "responses": {
+          "200": { "description": "The pet", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Pet" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
+        }
+      },
+      "delete": {
+        "tags": ["pets"],
+        "operationId": "deletePet",
+        "deprecated": true,
+        "parameters": [{ "name": "petId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "204": { "description": "Deleted" } }
+      }
+    },
+    "/pets/{petId}/photo": {
+      "parameters": [{ "name": "petId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+      "post": {
+        "tags": ["pets"],
+        "operationId": "uploadPhoto",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": { "file": { "type": "string", "format": "binary" }, "caption": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": { "204": { "description": "Stored" } }
+      },
+      "get": {
+        "tags": ["pets"],
+        "operationId": "downloadPhoto",
+        "responses": { "200": { "description": "The photo", "content": { "image/png": { "schema": { "type": "string", "format": "binary" } } } } }
+      }
+    },
+    "/pets/events": {
+      "get": {
+        "tags": ["pets"],
+        "operationId": "streamPetEvents",
+        "responses": { "200": { "description": "Live events", "content": { "text/event-stream": { "schema": { "$ref": "#/components/schemas/PetEvent" } } } } }
+      }
+    },
+    "/store/orders": {
+      "post": {
+        "tags": ["store"],
+        "operationId": "placeOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/xml": { "schema": { "$ref": "#/components/schemas/Order" } },
+            "application/json": { "schema": { "$ref": "#/components/schemas/Order" } }
+          }
+        },
+        "responses": { "200": { "description": "Placed", "content": { "application/xml": { "schema": { "$ref": "#/components/schemas/Order" } } } } }
+      }
+    },
+    "/health": { "get": { "responses": { "200": { "description": "ok", "content": { "text/plain": { "schema": { "type": "string" } } } } } } }
+  },
+  "components": {
+    "parameters": {
+      "TraceId": { "name": "X-Trace-Id", "in": "header", "schema": { "type": "string" } }
+    },
+    "requestBodies": {
+      "PetBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NewPet" } } } }
+    },
+    "responses": {
+      "Problem": { "description": "Any error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
+    },
+    "schemas": {
+      "PetStatus": { "type": "string", "enum": ["available", "pending", "sold"] },
+      "Category": { "type": "object", "required": ["id"], "properties": { "id": { "type": "integer" }, "name": { "type": "string" } } },
+      "NewPet": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "description": "Display name" },
+          "tag": { "type": "string", "nullable": true },
+          "status": { "$ref": "#/components/schemas/PetStatus" },
+          "category": { "$ref": "#/components/schemas/Category" },
+          "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+          "birthday": { "type": "string", "format": "date" },
+          "weight": { "type": "number", "minimum": 0, "exclusiveMinimum": true },
+          "callbackUrl": { "type": "string", "format": "uri" }
+        }
+      },
+      "Pet": {
+        "allOf": [
+          { "$ref": "#/components/schemas/NewPet" },
+          { "type": "object", "required": ["id"], "properties": { "id": { "type": "integer", "format": "int64" }, "createdAt": { "type": "string", "format": "date-time", "readOnly": true } } }
+        ]
+      },
+      "Dog": { "type": "object", "required": ["petType", "barks"], "properties": { "petType": { "type": "string", "enum": ["dog"] }, "barks": { "type": "boolean" } } },
+      "Cat": { "type": "object", "required": ["petType", "lives"], "properties": { "petType": { "type": "string", "enum": ["cat"] }, "lives": { "type": "integer" } } },
+      "Animal": { "oneOf": [{ "$ref": "#/components/schemas/Dog" }, { "$ref": "#/components/schemas/Cat" }], "discriminator": { "propertyName": "petType" } },
+      "Problem": { "type": "object", "required": ["title"], "properties": { "title": { "type": "string" }, "status": { "type": "integer" }, "detail": { "type": "string" } } },
+      "ValidationProblem": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Problem" },
+          { "type": "object", "properties": { "errors": { "type": "array", "items": { "type": "object", "required": ["field", "message"], "properties": { "field": { "type": "string" }, "message": { "type": "string" } } } } } }
+        ]
+      },
+      "TreeNode": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" }, "children": { "type": "array", "items": { "$ref": "#/components/schemas/TreeNode" } } } },
+      "PetEvent": { "type": "object", "required": ["type", "petId"], "properties": { "type": { "type": "string", "enum": ["created", "adopted", "removed"] }, "petId": { "type": "integer" } } },
+      "AdoptionEvent": { "type": "object", "required": ["petId", "adopter"], "properties": { "petId": { "type": "integer" }, "adopter": { "type": "string" } } },
+      "OrderItem": { "type": "object", "xml": { "name": "item" }, "required": ["sku"], "properties": { "sku": { "type": "string", "xml": { "attribute": true } }, "quantity": { "type": "integer" } } },
+      "Order": {
+        "type": "object",
+        "xml": { "name": "order" },
+        "required": ["id", "items"],
+        "properties": {
+          "id": { "type": "integer", "xml": { "attribute": true } },
+          "items": { "type": "array", "xml": { "wrapped": true, "name": "items" }, "items": { "$ref": "#/components/schemas/OrderItem" } },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

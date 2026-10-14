@@ -1,0 +1,47 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Events API", "version": "2.0.0" },
+  "servers": [{ "url": "https://events.test" }],
+  "paths": {
+    "/events/{id}": {
+      "get": {
+        "operationId": "getEvent",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "ok", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Event" } } } } }
+      }
+    },
+    "/events/{id}/payload": {
+      "get": {
+        "operationId": "getPayload",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "raw", "content": { "application/octet-stream": { "schema": { "type": "string", "contentMediaType": "application/octet-stream" } } } } }
+      }
+    }
+  },
+  "webhooks": {
+    "eventCreated": {
+      "post": {
+        "summary": "A new event",
+        "requestBody": { "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Event" } } } },
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Event": {
+        "type": "object",
+        "required": ["id", "kind", "at"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "const": "created" },
+          "at": { "type": "string", "format": "date-time" },
+          "note": { "type": ["string", "null"] },
+          "score": { "type": "number", "exclusiveMinimum": 0 },
+          "point": { "type": "array", "prefixItems": [{ "type": "number" }, { "type": "number" }], "items": false },
+          "name": { "$ref": "#/components/schemas/Event/properties/id", "description": "same as id" }
+        }
+      }
+    }
+  }
+}
