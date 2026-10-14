@@ -1,4 +1,4 @@
-import { AbortError, EndpointError, type ErrorRequest, NetworkError, ParseError, ValidationError } from "../errors";
+import { AbortError, EndpointError, type ErrorRequest, NetworkError, ParseError, SizeLimitError, ValidationError } from "../errors";
 import { type Schema, validate } from "../schema";
 
 /** A raw Server-Sent Event */
@@ -19,6 +19,13 @@ export interface NdjsonOptions {
 	 * `"throw"` (default) ends the stream with a `ParseError` / `ValidationError`, `"skip"` drops the item.
 	 */
 	onInvalid?: "throw" | "skip";
+	/**
+	 * Stop with a `SizeLimitError` once the stream has delivered this many bytes in total.
+	 * It also bounds a single endless line, so a misbehaving server cannot exhaust memory.
+	 * Items that arrived before the limit was hit are still yielded. No limit by default:
+	 * the client-wide `maxResponseBytes` does not apply to streams.
+	 */
+	maxBytes?: number;
 }
 
 export interface SseOptions extends NdjsonOptions {
@@ -72,8 +79,25 @@ export class EventStream<T> implements AsyncIterable<T> {
 
 // ------------------------------------------------------------------ parsing
 
+type ByteReader = Pick<ReadableStreamDefaultReader<Uint8Array>, "read">;
+
+/** A reader that fails with `SizeLimitError` as soon as more than `max` bytes were read */
+function limitReader(reader: ByteReader, max: number, request: ErrorRequest): ByteReader {
+	let total = 0;
+	return {
+		async read() {
+			const result = await reader.read();
+			if (!result.done) {
+				total += result.value.length;
+				if (total > max) throw new SizeLimitError(max, request);
+			}
+			return result;
+		},
+	};
+}
+
 /** Split a byte stream into lines. Handles `\n`, `\r\n` and a lone `\r`, also across chunk boundaries. */
-async function* readLines(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<string, void, undefined> {
+async function* readLines(reader: ByteReader): AsyncGenerator<string, void, undefined> {
 	const decoder = new TextDecoder();
 	let buffer = "";
 	let first = true;
@@ -110,7 +134,7 @@ async function* readLines(reader: ReadableStreamDefaultReader<Uint8Array>): Asyn
 }
 
 /** Assemble SSE messages from lines (https://html.spec.whatwg.org/multipage/server-sent-events.html) */
-async function* readSse(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<SseMessage, void, undefined> {
+async function* readSse(reader: ByteReader): AsyncGenerator<SseMessage, void, undefined> {
 	let data: string[] = [];
 	let event = "";
 	let lastId: string | undefined;
@@ -141,7 +165,7 @@ async function* readSse(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncG
 	// an event that is not terminated by a blank line is discarded, as the spec says
 }
 
-async function* readNdjson(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<string, void, undefined> {
+async function* readNdjson(reader: ByteReader): AsyncGenerator<string, void, undefined> {
 	for await (const line of readLines(reader)) {
 		if (line.trim() !== "") yield line;
 	}
@@ -164,6 +188,7 @@ export function openStream(response: Response, request: ErrorRequest, signal: Ab
 	const { schema, options } = spec;
 	const skip = options?.onInvalid === "skip";
 	const stopOn = options?.stopOn;
+	const source: ByteReader = options?.maxBytes === undefined ? reader : limitReader(reader, options.maxBytes, request);
 
 	const parseItem = async (text: string): Promise<{ value: unknown } | undefined> => {
 		let json: unknown;
@@ -184,7 +209,7 @@ export function openStream(response: Response, request: ErrorRequest, signal: Ab
 	async function* items(): AsyncGenerator<unknown, void, undefined> {
 		try {
 			if (spec.kind === "sse") {
-				for await (const message of readSse(reader!)) {
+				for await (const message of readSse(source)) {
 					if (typeof stopOn === "string" ? message.data === stopOn : stopOn?.(message)) return;
 					if (!schema) {
 						yield message;
@@ -194,7 +219,7 @@ export function openStream(response: Response, request: ErrorRequest, signal: Ab
 					if (parsed) yield parsed.value;
 				}
 			} else {
-				for await (const line of readNdjson(reader!)) {
+				for await (const line of readNdjson(source)) {
 					const parsed = await parseItem(line);
 					if (parsed) yield parsed.value;
 				}

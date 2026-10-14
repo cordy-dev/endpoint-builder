@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 
-import { AbortError, createClient, defineContract, endpoint, type EventStream, HttpError, NetworkError, ParseError, type SseMessage, TimeoutError, ValidationError } from "../src";
+import { AbortError, createClient, defineContract, endpoint, type EventStream, HttpError, NetworkError, ParseError, SizeLimitError, type SseMessage, TimeoutError, ValidationError } from "../src";
 import { chunked, hangingFetch, json, mockFetch, ndjsonResponse, sseResponse } from "./helpers";
 
 const Chat = z.object({ type: z.string(), text: z.string().optional() });
@@ -236,5 +236,54 @@ describe("contract", () => {
 describe("chunked helper", () => {
 	it("is itself a valid streaming response", async () => {
 		expect(await chunked(["a", "b"]).text()).toBe("ab");
+	});
+});
+
+describe("maxBytes", () => {
+	const event = (n: number) => `data: {"type":"e${n}"}\n\n`;
+	const eventBytes = new TextEncoder().encode(event(0)).length;
+
+	it("ends the stream with SizeLimitError, after yielding what arrived in time", async () => {
+		const api = createClient({ baseUrl: base, fetch: mockFetch(() => sseResponse(Array.from({ length: 10 }, (_, i) => event(i)))) });
+		const stream = await api.get("/x").sse(Chat, { maxBytes: eventBytes * 2 + 5 });
+		const seen: unknown[] = [];
+		const error = await (async () => {
+			try {
+				for await (const item of stream) seen.push(item);
+			} catch (e) {
+				return e;
+			}
+		})();
+		expect(seen).toEqual([{ type: "e0" }, { type: "e1" }]);
+		expect(error).toBeInstanceOf(SizeLimitError);
+		expect(error).toMatchObject({ type: "size", limit: eventBytes * 2 + 5 });
+	});
+
+	it("bounds an endless line without a newline, and closes the connection", async () => {
+		let sent = 0;
+		const cancelled = vi.fn();
+		const body = new ReadableStream<Uint8Array>({
+			pull(controller) { sent += 100; controller.enqueue(new Uint8Array(100).fill(120)); },
+			cancel: cancelled,
+		});
+		const api = createClient({ baseUrl: base, fetch: () => Promise.resolve(new Response(body, { headers: { "content-type": "application/x-ndjson" } })) });
+		const stream = await api.get("/x").ndjson(Chat, { maxBytes: 1000 });
+		await expect(stream.toArray()).rejects.toBeInstanceOf(SizeLimitError);
+		expect(sent).toBeLessThan(5000);
+		expect(cancelled).toHaveBeenCalled();
+	});
+
+	it("is not triggered by a stream that stays within the limit, and works in contracts", async () => {
+		const events = Array.from({ length: 3 }, (_, i) => event(i));
+		const contract = defineContract({ feed: endpoint.get("/feed").sse(Chat, { maxBytes: eventBytes * 3 }) });
+		const api = createClient({ baseUrl: base, fetch: mockFetch(() => sseResponse(events)) }).api(contract);
+		expect(await (await api.feed()).toArray()).toHaveLength(3); // exactly at the limit
+		const tight = createClient({ baseUrl: base, fetch: mockFetch(() => sseResponse(events)) }).api(defineContract({ feed: endpoint.get("/feed").sse(Chat, { maxBytes: eventBytes * 3 - 1 }) }));
+		await expect((await tight.feed()).toArray()).rejects.toBeInstanceOf(SizeLimitError);
+	});
+
+	it("the client-wide maxResponseBytes still does not apply to streams", async () => {
+		const api = createClient({ baseUrl: base, maxResponseBytes: 10, fetch: mockFetch(() => sseResponse(Array.from({ length: 5 }, (_, i) => event(i)))) });
+		expect(await (await api.get("/x").sse(Chat)).toArray()).toHaveLength(5);
 	});
 });

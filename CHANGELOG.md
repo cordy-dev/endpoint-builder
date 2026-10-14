@@ -23,6 +23,7 @@ A full redesign. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide and [d
 - Typed streams: `.sse(schema?, { stopOn, onInvalid })` and `.ndjson(schema, { onInvalid })` resolve with an `EventStream` of validated items. Available on requests and in contracts (`endpoint.get(...).sse(Event)`).
 - Typed endpoint headers: `endpoint.get(...).headers(schema)` makes `headers` a validated, typed input. `defaultHeaders()` sets constant headers.
 - `@cordy/endpoint-builder/testing`: `mockClient(contract, handlers)` and `mockFetch(contract, handlers)` answer a contract with typed handlers and a typed `fail(status, body)`.
+- `maxBytes` option for `.sse()` and `.ndjson()`: the stream ends with a `SizeLimitError` after that many bytes, which also bounds an endless line.
 - `.idempotent()` (on requests and contract endpoints): sends an `Idempotency-Key` header, one key per call shared by its retries, and lets the retry policy retry POST and PATCH.
 - Limits: `concurrency` and `rateLimit` queue requests (aborting a queued request never touches the network, retries count too); `maxResponseBytes` rejects oversized bodies with the new `SizeLimitError` (`type: "size"`) without reading them.
 - Documentation for AI coding assistants: `llms.txt` (rules and common mistakes) and `llms-full.txt` (README and migration guide in one file) ship in the package; `AGENTS.md` / `CLAUDE.md` guide agents working on this repository. A test keeps `llms-full.txt` in sync (`npm run docs:llms`).

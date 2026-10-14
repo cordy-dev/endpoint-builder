@@ -238,7 +238,7 @@ const { data: stream, error } = await api.chat({ query }).safe();
 - `break` or `stream.cancel()` closes the connection. A user `AbortSignal` cancels the stream, which then throws `AbortError`. A dropped connection throws `NetworkError`.
 - The `timeout` covers the wait for the response, not the lifetime of the stream.
 - A stream is read once. Each `await` of the request opens a new connection, and streams are never deduped.
-- `maxResponseBytes` does not apply to streams. To bound one, stop reading with `break`, `stopOn` or an `AbortSignal`.
+- `maxResponseBytes` does not apply to streams. Bound one explicitly with `{ maxBytes }`: the stream then ends with a `SizeLimitError` once it has delivered that many bytes, and it also bounds a single endless line. You can still stop earlier with `break`, `stopOn` or an `AbortSignal`.
 
 To expose a stream from your own function, wrap it in an async generator. `yield*` forwards the values and closes the connection when the consumer stops early:
 
@@ -331,7 +331,7 @@ await api.get("/export").maxResponseBytes(50_000_000);  // raise it for one requ
 - Requests over the limit wait in a FIFO queue. Aborting a queued request removes it without touching the network.
 - Retries count against the limits too, so a retry storm cannot exceed the rate. Derived clients (`api.with(...)`) share the queue unless you change `concurrency` or `rateLimit`.
 - `concurrency` counts requests until their response headers arrive. Bodies and streams read later are not counted.
-- `maxResponseBytes` rejects a body announced as too large (`Content-Length`) without reading it, and stops reading as soon as a chunked body passes the limit. Huge **error** bodies are truncated instead of rejected. Streams (`sse`, `ndjson`, `stream()`) and `raw()` are not limited.
+- `maxResponseBytes` rejects a body announced as too large (`Content-Length`) without reading it, and stops reading as soon as a chunked body passes the limit. Huge **error** bodies are truncated instead of rejected. Streams (`sse`, `ndjson`, `stream()`) and `raw()` are not limited by it; use `{ maxBytes }` on `sse()` / `ndjson()` for streams.
 
 ## Authentication
 

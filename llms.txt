@@ -17,7 +17,7 @@
 - Streams: `const stream = await api.get("/chat").sse(Schema)`, then `for await (const event of stream)`. The `await` before the loop is required: it resolves after the status check.
 - Auth: `bearer`, `apiKey`, `basic`, `refreshable`. Pass tokens as getters, `bearer(() => store.token)`, instead of rebuilding the client. `refreshable` shares one refresh between concurrent 401s.
 - Observe with hooks (`onRequest`, `onResponse`, `onSuccess`, `onError`, `onRetry`) on the client or on one request. Wrap calls (timing, caching) with `middleware`. Register `onSuccess` after `returns()` / `map()` so the data has its final type.
-- Protect unattended callers: `concurrency`, `rateLimit: { requests, per }` and `maxResponseBytes` (streams are not covered; stop them with `break`, `stopOn` or a signal). Credential-like query params (`api_key`, `token`, ...) are already masked as `***` in error messages and `error.request.url`.
+- Protect unattended callers: `concurrency`, `rateLimit: { requests, per }` and `maxResponseBytes` (streams are not covered; bound one with `.sse(Schema, { maxBytes })` or stop it with `break`, `stopOn` or a signal). Credential-like query params (`api_key`, `token`, ...) are already masked as `***` in error messages and `error.request.url`.
 - In tests use `mockClient(contract, handlers)` from `@cordy/endpoint-builder/testing`, or inject `mockFetch(contract, handlers)` with `createClient({ fetch })` to test a client you configured. Do not stub the global `fetch` by hand. Handlers get `{ params, query, headers, body }` and a typed `fail(status, body)`; `fail(503)` simulates a transient failure.
 
 ## Common mistakes
