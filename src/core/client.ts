@@ -273,6 +273,9 @@ export class ClientBuilder<TErrors extends ErrorMap = {}> {
 
 // ------------------------------------------------------------------- client
 
+/** What `createApi` needs from a client without exposing it on the public class */
+const cores = new WeakMap<object, ClientCore>();
+
 type BaseRequestOptions = {
 	query?: QueryInput;
 	headers?: HeadersInput;
@@ -311,6 +314,7 @@ export class Client<TErrors extends ErrorMap = {}> {
 		layers.push(hooksMiddleware(hooks), dedupeMiddleware(), ...config.middleware, retryMiddleware(hooks.onRetry), authMiddleware());
 		if (config.limiter) layers.push(limitMiddleware(config.limiter)); // innermost: counts every network attempt
 		this.#core = { config, pipeline: compose(layers, createTransport(config.fetch)) };
+		cores.set(this, this.#core);
 	}
 
 	/** Start the optional fluent builder (`createClient(options)` is the recommended way) */
@@ -373,17 +377,6 @@ export class Client<TErrors extends ErrorMap = {}> {
 		return this.#request(method, path, options);
 	}
 
-	/**
-	 * Bind a contract of endpoints to this client:
-	 * ```ts
-	 * const api = client.api({ users: { get: endpoint.get("/users/:id").returns(User) } });
-	 * const user = await api.users.get({ params: { id: 1 } });
-	 * ```
-	 */
-	api<const C extends Contract>(contract: C): BoundContract<C, TErrors> {
-		return bindContract(this.#core, contract) as BoundContract<C, TErrors>;
-	}
-
 	/** Derive a client with extra options (headers merge, error schemas accumulate in the type) */
 	with<O extends ClientOptions>(options: O): Client<MergeErrors<TErrors, ErrorsOf<O>>> {
 		return new Client(applyOptions(this.#core.config, options));
@@ -425,4 +418,41 @@ export function createClient(baseUrl?: string): Client;
 export function createClient<const O extends ClientOptions>(options: O): Client<ErrorsOf<O>>;
 export function createClient(options: string | ClientOptions = {}): Client<any> {
 	return new Client(applyOptions(DEFAULT_CONFIG, typeof options === "string" ? { baseUrl: options } : options));
+}
+
+/**
+ * A contract bound to a client: every endpoint becomes a typed function. `$client` and `$with` are
+ * the only extra members (non-enumerable), so contract keys cannot be called `$client` or `$with`.
+ */
+export type Api<C, TErrors extends ErrorMap = {}> = BoundContract<C, TErrors> & {
+	/** The underlying client, for calls that are not part of the contract */
+	readonly $client: Client<TErrors>;
+	/** Derive an API with extra options; the contract stays the same */
+	$with<O extends ClientOptions>(options: O): Api<C, MergeErrors<TErrors, ErrorsOf<O>>>;
+};
+
+function bindApi<C extends Contract, E extends ErrorMap>(client: Client<E>, contract: C): Api<C, E> {
+	for (const reserved of ["$client", "$with"]) {
+		if (reserved in contract) throw new TypeError(`"${reserved}" is reserved by createApi and cannot be a contract key`);
+	}
+	const api = bindContract(cores.get(client)!, contract) as Record<string, unknown>;
+	Object.defineProperties(api, {
+		$client: { value: client },
+		$with: { value: (options: ClientOptions) => bindApi(client.with(options), contract) },
+	});
+	return api as unknown as Api<C, E>;
+}
+
+/**
+ * Create a client for a contract of endpoints (see `endpoint` and `defineContract`).
+ *
+ * ```ts
+ * const api = createApi(contract, { baseUrl: "https://api.example.com", auth });
+ * const user = await api.users.get({ params: { id: 1 } });   // typed from the contract
+ * api.$client.get("/health");                                // the plain client, for anything else
+ * const admin = api.$with({ headers: { "X-Role": "admin" } });
+ * ```
+ */
+export function createApi<const C extends Contract, const O extends ClientOptions = {}>(contract: C, options?: O): Api<C, ErrorsOf<O>> {
+	return bindApi(createClient(options ?? ({} as O)), contract) as unknown as Api<C, ErrorsOf<O>>;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 
-import { bearer, createClient, defineContract, endpoint, HttpError, isHttpError, ValidationError } from "../src";
+import { bearer, createApi, defineContract, endpoint, HttpError, isHttpError, ValidationError } from "../src";
 import { mockClient, mockFetch } from "../src/testing";
 
 const User = z.object({ id: z.number(), name: z.string() });
@@ -176,7 +176,7 @@ describe("testing retries (README example)", () => {
 				return ++calls === 1 ? fail(503) : { id: 1, name: "x" };
 			},
 		});
-		const api = createClient({ baseUrl: "http://mock.test", fetch, retry: { delay: 0 } }).api(payments);
+		const api = createApi(payments, { baseUrl: "http://mock.test", fetch, retry: { delay: 0 } });
 		expect(await api.create({ body: { title: "x" } })).toEqual({ id: 1, name: "x" });
 		expect(calls).toBe(2);
 		expect(keys[0]).toBeTruthy();
@@ -192,7 +192,7 @@ describe("testing retries (README example)", () => {
 			one: ({ params, headers }) => { expectTypeOf(headers).toEqualTypeOf<Headers>(); return `one:${params.id}`; },
 			stream: () => "stream",
 		});
-		const api = createClient({ baseUrl: "http://mock.test", fetch }).api(routes);
+		const api = createApi(routes, { baseUrl: "http://mock.test", fetch });
 		expect(await api.stream()).toBe("stream");
 		expect(await api.one({ params: { id: 7 } })).toBe("one:7");
 	});
@@ -201,7 +201,7 @@ describe("testing retries (README example)", () => {
 describe("mockFetch", () => {
 	it("lets you test a fully configured client", async () => {
 		const fetch = mockFetch(contract, { users: { get: ({ headers }) => ({ id: 1, name: headers.get("x-app") ?? "" }) } }, { baseUrl: "https://api.test" });
-		const client = createClient({ baseUrl: "https://api.test", fetch, headers: { "x-app": "web" } });
-		expect(await client.api(contract).users.get({ params: { id: 1 } })).toEqual({ id: 1, name: "web" });
+		const api = createApi(contract, { baseUrl: "https://api.test", fetch, headers: { "x-app": "web" } });
+		expect(await api.users.get({ params: { id: 1 } })).toEqual({ id: 1, name: "web" });
 	});
 });

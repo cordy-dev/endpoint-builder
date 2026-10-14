@@ -14,7 +14,7 @@ Type-safe HTTP client for TypeScript, built on native `fetch`. It has zero depen
 - **Typed end to end.** Path params come from the URL string. Query, body, response and error bodies come from your schemas. The API is inspired by Elysia/Eden.
 - **Any Standard Schema validator.** Works with [Standard Schema](https://standardschema.dev) libraries: zod, valibot, arktype, effect, yup, … Plain functions go through `schema(fn)`.
 - **Immutable, lazy requests.** A client is a plain options object (`createClient(options)`), and every request is an immutable builder. Partially configured builders are safe to reuse.
-- **Typed endpoint contracts.** Describe an API once, bind it to a client and get a typed SDK. Params, query, headers, body, response and errors are all typed.
+- **Typed endpoint contracts.** Describe an API once, create an API from it with `createApi` and get a typed SDK. Params, query, headers, body, response and errors are all typed.
 - **Typed streams.** Server-Sent Events and NDJSON arrive as an async iterable of validated items.
 - **Test without a network.** `mockClient(contract, handlers)` answers your contract with typed handlers, through the real client.
 - **Errors you can check.** Each failure has its own class: `HttpError<404, NotFound>`, `NetworkError`, `TimeoutError`, `AbortError`, `ValidationError` and `ParseError`. They share a `type` discriminator, and `.safe()` returns them as a `Result`.
@@ -179,10 +179,10 @@ The input type of `schema(fn)` is `unknown`. Use a schema library when you need 
 
 ## Typed endpoint contracts
 
-Describe the API once, Elysia-style, and bind it to any client:
+Describe the API once, Elysia-style, and turn it into a typed client with `createApi`:
 
 ```ts
-import { createClient, defineContract, endpoint } from "@cordy/endpoint-builder";
+import { createApi, defineContract, endpoint } from "@cordy/endpoint-builder";
 
 export const contract = defineContract({
   users: {
@@ -194,15 +194,20 @@ export const contract = defineContract({
   health: endpoint.get("/health").as<{ status: "ok" }>(),
 });
 
-const api = createClient({ baseUrl, auth }).api(contract);
+const api = createApi(contract, { baseUrl, auth }); // takes the same options as createClient
 
 const user = await api.users.get({ params: { id: 1 } });   // User
 await api.users.create({ body: { name: "Ann", email: "a@b.co" } }); // body typed from CreateUser input
 await api.users.list();                                     // input optional, nothing is required
 await api.users.get({ params: { id: 1 } }).timeout(1000).safe(); // still a RequestBuilder
+
+api.$client.get("/anything-else");                  // the plain client, for calls outside the contract
+const admin = api.$with({ headers: { "X-Role": "admin" } }); // a derived API for the same contract
 ```
 
-Helper types: `EndpointInput<E>`, `EndpointData<E>`, `EndpointErrors<E>`.
+`$client` and `$with` are the only extra members (they are not enumerable), so a top-level contract key cannot be called `$client` or `$with`.
+
+Helper types: `EndpointInput<E>`, `EndpointData<E>`, `EndpointErrors<E>`, `Api<C>`.
 
 ### Typed headers
 
@@ -434,7 +439,7 @@ let calls = 0;
 const fetch = mockFetch(contract, {
   create: ({ headers }, { fail }) => (++calls === 1 ? fail(503) : { id: 1, title: "x", done: false }),
 });
-const api = createClient({ baseUrl: "http://mock.test", fetch, retry: { delay: 0 } }).api(contract);
+const api = createApi(contract, { baseUrl: "http://mock.test", fetch, retry: { delay: 0 } });
 await api.create({ body: { title: "x" } }); // `create` is declared with .idempotent(); the retry reuses its key
 ```
 

@@ -1,6 +1,6 @@
 import type { EndpointDefinition } from "../contract";
-import { type BoundContract, type Contract, Endpoint, type EndpointData, type EndpointErrors, type Unset } from "../contract";
-import { type ClientOptions, createClient, type ErrorsOf } from "../core/client";
+import { type Contract, Endpoint, type EndpointData, type EndpointErrors, type Unset } from "../contract";
+import { type Api, type ClientOptions, createApi, type ErrorsOf } from "../core/client";
 import type { InferOutput } from "../schema";
 import type { EventStream, SseMessage } from "../stream";
 import type { FetchLike, MaybePromise, Simplify } from "../types";
@@ -203,8 +203,7 @@ export function mockClient<const C extends Contract, const O extends ClientOptio
 	contract: C,
 	handlers: MockHandlers<C>,
 	options?: O,
-): BoundContract<C, ErrorsOf<O>> {
+): Api<C, ErrorsOf<O>> {
 	const baseUrl = options?.baseUrl ?? DEFAULT_BASE_URL;
-	const client = createClient({ retry: false, timeout: false, ...options, baseUrl, fetch: mockFetch(contract, handlers, { baseUrl }) });
-	return client.api(contract) as unknown as BoundContract<C, ErrorsOf<O>>;
+	return createApi(contract, { retry: false, timeout: false, ...options, baseUrl, fetch: mockFetch(contract, handlers, { baseUrl }) }) as unknown as Api<C, ErrorsOf<O>>;
 }

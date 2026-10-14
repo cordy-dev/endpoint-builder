@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 
-import { createClient, defineContract, endpoint, type EndpointInput, ValidationError } from "../src";
+import { createApi, defineContract, endpoint, type EndpointInput, ValidationError } from "../src";
 import { json, mockFetch } from "./helpers";
 
 const Tenant = z.object({ "x-tenant": z.string(), "x-trace": z.string().optional() });
@@ -18,7 +18,7 @@ describe("typed endpoint headers", () => {
 		type MeInput = EndpointInput<typeof contract.me>;
 		expectTypeOf<MeInput["headers"]>().toEqualTypeOf<{ "x-tenant": string; "x-trace"?: string | undefined }>();
 
-		const api = createClient().api(contract);
+		const api = createApi(contract);
 		const compileOnly = () => {
 			// @ts-expect-error headers are required
 			void api.me();
@@ -34,7 +34,7 @@ describe("typed endpoint headers", () => {
 	it("keeps headers optional when every field is optional or has a default", () => {
 		type ListInput = EndpointInput<typeof contract.list>;
 		expectTypeOf<ListInput["headers"]>().toEqualTypeOf<{ "x-page-size"?: unknown } | undefined>();
-		const api = createClient().api(contract);
+		const api = createApi(contract);
 		const compileOnly = () => { void api.list(); void api.list({ headers: { "x-page-size": 50 } }); };
 		void compileOnly;
 	});
@@ -42,14 +42,14 @@ describe("typed endpoint headers", () => {
 	it("untyped endpoints still accept any headers", () => {
 		type PlainInput = EndpointInput<typeof contract.plain>;
 		expectTypeOf<PlainInput["headers"]>().not.toBeAny();
-		const api = createClient().api(contract);
+		const api = createApi(contract);
 		const compileOnly = () => { void api.plain({ headers: { "x-anything": "1" } }); };
 		void compileOnly;
 	});
 
 	it("validates, transforms and sends the headers", async () => {
 		const fetch = mockFetch(json({ id: 1 }));
-		const api = createClient({ baseUrl: "https://api.test", fetch, headers: { "x-app": "web" } }).api(contract);
+		const api = createApi(contract, { baseUrl: "https://api.test", fetch, headers: { "x-app": "web" } });
 
 		await api.me({ headers: { "x-tenant": "acme", "x-trace": "t1" } });
 		expect(fetch.calls[0]!.headers.get("x-tenant")).toBe("acme");
@@ -65,7 +65,7 @@ describe("typed endpoint headers", () => {
 
 	it("rejects invalid headers before sending", async () => {
 		const fetch = mockFetch(json({}));
-		const api = createClient({ baseUrl: "https://api.test", fetch }).api(contract);
+		const api = createApi(contract, { baseUrl: "https://api.test", fetch });
 		// @ts-expect-error missing x-tenant on purpose
 		const { error } = await api.me({ headers: {} }).safe();
 		expect(error).toBeInstanceOf(ValidationError);
@@ -75,7 +75,7 @@ describe("typed endpoint headers", () => {
 
 	it("untyped endpoints send the headers as given", async () => {
 		const fetch = mockFetch(json({}));
-		const api = createClient({ baseUrl: "https://api.test", fetch }).api(contract);
+		const api = createApi(contract, { baseUrl: "https://api.test", fetch });
 		await api.plain({ headers: { "x-anything": "1" } });
 		expect(fetch.calls[0]!.headers.get("x-anything")).toBe("1");
 	});

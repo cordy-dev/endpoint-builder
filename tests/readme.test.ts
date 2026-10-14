@@ -4,7 +4,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 
-import { Client, createClient, defineContract, endpoint, isHttpError, type Middleware, refreshable } from "../src";
+import { Client, createApi, defineContract, endpoint, isHttpError, type Middleware, refreshable } from "../src";
 import { json, mockFetch } from "./helpers";
 
 const User = z.object({ id: z.number(), name: z.string() });
@@ -27,7 +27,7 @@ const contract = defineContract({
 describe("README", () => {
 	it("safe() narrowing example", async () => {
 		const fetch = mockFetch(json({ message: "gone" }, { status: 404 }));
-		const api = Client.builder("https://api.test").errors({ 401: Unauthorized }).fetch(fetch).build().api(contract);
+		const api = createApi(contract, { baseUrl: "https://api.test", errors: { 401: Unauthorized }, fetch });
 
 		const { data, error } = await api.users.get({ params: { id: 1 } }).safe();
 		let seen = "";
@@ -71,7 +71,7 @@ describe("README", () => {
 
 	it("contract example", async () => {
 		const fetch = mockFetch(json({ id: 1, name: "Ann" }), json([]), json({ id: 1, name: "Ann" }));
-		const api = createClient({ baseUrl: "https://api.test", fetch, auth: "token" }).api(contract);
+		const api = createApi(contract, { baseUrl: "https://api.test", fetch, auth: "token" });
 		const user = await api.users.create({ body: { name: "Ann", email: "a@b.co" } });
 		expectTypeOf(user).toEqualTypeOf<{ id: number; name: string }>();
 		await api.users.list();

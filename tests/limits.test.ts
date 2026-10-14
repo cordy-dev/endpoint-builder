@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { AbortError, type ApiError, createClient, defineContract, endpoint, HttpError, SizeLimitError } from "../src";
+import { AbortError, type ApiError, createApi,createClient, defineContract, endpoint, HttpError, SizeLimitError } from "../src";
 import { chunked, json, mockFetch, sseResponse } from "./helpers";
 
 const base = "https://api.test";
@@ -56,7 +56,7 @@ describe("idempotent()", () => {
 	it("a contract endpoint creates a new key for every call, shared only by that call's retries", async () => {
 		const contract = defineContract({ pay: endpoint.post("/pay").idempotent().as<unknown>() });
 		const fetch = mockFetch(json({}, { status: 503 }), json({}), json({}));
-		const api = createClient({ baseUrl: base, fetch, retry: { delay: 0 } }).api(contract);
+		const api = createApi(contract, { baseUrl: base, fetch, retry: { delay: 0 } });
 		await api.pay();
 		await api.pay();
 		const [first, retried, second] = fetch.calls.map(call => call.headers.get("idempotency-key"));
@@ -67,7 +67,7 @@ describe("idempotent()", () => {
 	it("works in contracts", async () => {
 		const contract = defineContract({ pay: endpoint.post("/pay").idempotent().as<{ ok: true }>() });
 		const fetch = mockFetch(json({}, { status: 502 }), json({ ok: true }));
-		const api = createClient({ baseUrl: base, fetch, retry: { delay: 0 } }).api(contract);
+		const api = createApi(contract, { baseUrl: base, fetch, retry: { delay: 0 } });
 		expect(await api.pay()).toEqual({ ok: true });
 		expect(fetch).toHaveBeenCalledTimes(2);
 		expect(fetch.calls[0]!.headers.get("idempotency-key")).toBe(fetch.calls[1]!.headers.get("idempotency-key"));

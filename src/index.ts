@@ -1,6 +1,6 @@
 // Client
-export type { BodyOptions, ClientOptions, RequestOptions } from "./core/client";
-export { Client, ClientBuilder, createClient } from "./core/client";
+export type { Api, BodyOptions, ClientOptions, ErrorsOf, RequestOptions } from "./core/client";
+export { Client, ClientBuilder, createApi, createClient } from "./core/client";
 export type { ClientConfig, Hooks, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, Unwrap } from "./core/config";
 export type { ErrorSchemas, IdempotentOptions, InferErrors, MergeErrors } from "./core/request";
 export { RequestBuilder } from "./core/request";

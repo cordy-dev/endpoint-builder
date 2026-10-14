@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 
-import { AbortError, createClient, defineContract, endpoint, type EventStream, HttpError, NetworkError, ParseError, SizeLimitError, type SseMessage, TimeoutError, ValidationError } from "../src";
+import { AbortError, createApi,createClient, defineContract, endpoint, type EventStream, HttpError, NetworkError, ParseError, SizeLimitError, type SseMessage, TimeoutError, ValidationError } from "../src";
 import { chunked, hangingFetch, json, mockFetch, ndjsonResponse, sseResponse } from "./helpers";
 
 const Chat = z.object({ type: z.string(), text: z.string().optional() });
@@ -222,7 +222,7 @@ describe("contract", () => {
 
 	it("binds streaming endpoints; calls resolve with an EventStream", async () => {
 		const fetch = mockFetch(() => sse("data: {\"type\":\"a\"}", "data: [DONE]"));
-		const api = createClient({ baseUrl: base, fetch }).api(contract);
+		const api = createApi(contract, { baseUrl: base, fetch });
 		const stream = await api.chat({ params: { room: "r1" }, query: { q: "hi" } });
 		expectTypeOf(stream).toEqualTypeOf<EventStream<{ type: string; text?: string | undefined }>>();
 		expect(await stream.toArray()).toEqual([{ type: "a" }]);
@@ -276,9 +276,9 @@ describe("maxBytes", () => {
 	it("is not triggered by a stream that stays within the limit, and works in contracts", async () => {
 		const events = Array.from({ length: 3 }, (_, i) => event(i));
 		const contract = defineContract({ feed: endpoint.get("/feed").sse(Chat, { maxBytes: eventBytes * 3 }) });
-		const api = createClient({ baseUrl: base, fetch: mockFetch(() => sseResponse(events)) }).api(contract);
+		const api = createApi(contract, { baseUrl: base, fetch: mockFetch(() => sseResponse(events)) });
 		expect(await (await api.feed()).toArray()).toHaveLength(3); // exactly at the limit
-		const tight = createClient({ baseUrl: base, fetch: mockFetch(() => sseResponse(events)) }).api(defineContract({ feed: endpoint.get("/feed").sse(Chat, { maxBytes: eventBytes * 3 - 1 }) }));
+		const tight = createApi(defineContract({ feed: endpoint.get("/feed").sse(Chat, { maxBytes: eventBytes * 3 - 1 }) }), { baseUrl: base, fetch: mockFetch(() => sseResponse(events)) });
 		await expect((await tight.feed()).toArray()).rejects.toBeInstanceOf(SizeLimitError);
 	});
 

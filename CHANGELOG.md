@@ -14,7 +14,7 @@ A full redesign. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide and [d
   - `.text()`, `.blob()`, `.arrayBuffer()`, `.formData()` and `.stream()`;
   - `.raw()`, `.send()` and `.safe()`;
   - `.meta()` and `.init()`.
-- Typed endpoint contracts: `endpoint.get(...)`, `defineContract()` and `client.api(contract)`.
+- Typed endpoint contracts: `endpoint.get(...)`, `defineContract()` and `createApi(contract, options)`, which returns the typed endpoints plus `$client` and `$with`.
 - Typed error bodies per status code at client and request level. `isHttpError(error, status)` narrows the body to the declared type.
 - Validation with any Standard Schema v1 library (zod, valibot, arktype, effect, yup) for params, query, body, response and error bodies. `schema(fn)` wraps a plain function.
 - `Endpoint` takes a single spec generic: `Endpoint<{ method; path; params; query; body; data; errors }>`.

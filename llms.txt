@@ -4,7 +4,7 @@
 
 ## Rules for code that uses this library
 
-- Create **one** client and reuse it: `const api = createClient({ baseUrl, auth, ... })`. Derive variants with `api.with({ headers })`. Never build a client per request. Bind a contract of `endpoint.*` definitions with `api.api(contract)`.
+- Create **one** client and reuse it: `const api = createClient({ baseUrl, auth, ... })`. Derive variants with `api.with({ headers })`. Never build a client per request. For a contract of `endpoint.*` definitions use `createApi(contract, options)` (same options as `createClient`); `api.$client` is the plain client and `api.$with({...})` derives a new API.
 - Put dynamic values in `params` and `query`, never in string concatenation: `api.get("/users/:id", { params: { id } })`. Param names are typed from the path string.
 - Validate everything that comes from outside with `.returns(Schema)`. `.as<T>()` only casts the type and checks nothing. Use `schema(fn)` to wrap a plain validation function.
 - Requests are **lazy and immutable**. Nothing is sent until you `await` (or call `.send()`, `.safe()`, `.raw()`), and awaiting twice sends twice. Every builder method returns a **new** builder, so `req.header("x", "1");` on its own does nothing. Use the return value.
