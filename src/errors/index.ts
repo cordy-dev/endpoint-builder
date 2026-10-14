@@ -13,7 +13,11 @@ export type ErrorType = "http" | "network" | "timeout" | "abort" | "validation" 
 export abstract class EndpointError extends Error {
 	abstract readonly type: ErrorType;
 
-	constructor(message: string, readonly request: ErrorRequest | undefined, options?: { cause?: unknown }) {
+	constructor(
+		message: string,
+		readonly request: ErrorRequest | undefined,
+		options?: { cause?: unknown },
+	) {
 		super(message, options);
 	}
 
@@ -35,7 +39,10 @@ export class HttpError<TStatus extends number = number, TBody = unknown> extends
 		readonly response: Response,
 		request: ErrorRequest | undefined,
 	) {
-		super(`HTTP ${status}${statusText ? ` ${statusText}` : ""}${request ? ` (${request.method} ${request.url})` : ""}`, request);
+		super(
+			`HTTP ${status}${statusText ? ` ${statusText}` : ""}${request ? ` (${request.method} ${request.url})` : ""}`,
+			request,
+		);
 	}
 }
 
@@ -54,7 +61,10 @@ export class TimeoutError extends EndpointError {
 	readonly type = "timeout" as const;
 	override readonly name = "TimeoutError";
 
-	constructor(readonly timeout: number, request: ErrorRequest | undefined) {
+	constructor(
+		readonly timeout: number,
+		request: ErrorRequest | undefined,
+	) {
 		super(`Request timed out after ${timeout}ms${request ? ` (${request.method} ${request.url})` : ""}`, request);
 	}
 }
@@ -95,7 +105,12 @@ export class ParseError extends EndpointError {
 	readonly type = "parse" as const;
 	override readonly name = "ParseError";
 
-	constructor(message: string, readonly text: string, request: ErrorRequest | undefined, cause?: unknown) {
+	constructor(
+		message: string,
+		readonly text: string,
+		request: ErrorRequest | undefined,
+		cause?: unknown,
+	) {
 		super(message, request, { cause });
 	}
 }
@@ -105,7 +120,11 @@ export class SizeLimitError extends EndpointError {
 	readonly type = "size" as const;
 	override readonly name = "SizeLimitError";
 
-	constructor(readonly limit: number, request: ErrorRequest | undefined, readonly declared?: number) {
+	constructor(
+		readonly limit: number,
+		request: ErrorRequest | undefined,
+		readonly declared?: number,
+	) {
 		super(
 			`Response body exceeds ${limit} bytes${declared === undefined ? "" : ` (Content-Length: ${declared})`}${request ? ` (${request.method} ${request.url})` : ""}`,
 			request,
@@ -118,7 +137,7 @@ export type ErrorMap = Record<number, unknown>;
 
 /** Union of declared HTTP errors */
 export type DeclaredHttpError<TErrors extends ErrorMap> = {
-	[K in keyof TErrors & number]: HttpError<K, TErrors[K]>
+	[K in keyof TErrors & number]: HttpError<K, TErrors[K]>;
 }[keyof TErrors & number];
 
 /** Every error a request can fail with */
@@ -132,8 +151,9 @@ export type ApiError<TErrors extends ErrorMap = {}> =
 	| ParseError
 	| SizeLimitError;
 
-type HttpErrorFor<E, S extends number> =
-	[Extract<E, HttpError<S, any>>] extends [never] ? HttpError<S, unknown> : Extract<E, HttpError<S, any>>;
+type HttpErrorFor<E, S extends number> = [Extract<E, HttpError<S, any>>] extends [never]
+	? HttpError<S, unknown>
+	: Extract<E, HttpError<S, any>>;
 
 /**
  * Type guard for HTTP errors. With a status it narrows the body to the declared type:

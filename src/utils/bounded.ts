@@ -50,5 +50,9 @@ function concat(chunks: Uint8Array[], total: number): Uint8Array {
 
 /** A fresh `Response` carrying already-read bytes, with the status and headers of the original */
 export function withBytes(response: Response, bytes: Uint8Array): Response {
-	return new Response(bytes as BodyInit, { status: response.status, statusText: response.statusText, headers: response.headers });
+	return new Response(bytes as BodyInit, {
+		status: response.status,
+		statusText: response.statusText,
+		headers: response.headers,
+	});
 }

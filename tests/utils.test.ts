@@ -2,7 +2,16 @@ import * as v from "valibot";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 
-import { buildPath, createQuerySerializer, type InferInput, type InferOutput, path, type PathParams, schema, validate } from "../src";
+import {
+	buildPath,
+	createQuerySerializer,
+	type InferInput,
+	type InferOutput,
+	path,
+	type PathParams,
+	schema,
+	validate,
+} from "../src";
 
 type P = string | number | bigint | boolean;
 
@@ -29,7 +38,7 @@ describe("path params", () => {
 	});
 
 	it("throws on missing params", () => {
-		expect(() => buildPath("/users/:id", {} as never)).toThrow("Missing path parameter \"id\"");
+		expect(() => buildPath("/users/:id", {})).toThrow('Missing path parameter "id"');
 	});
 
 	it("path() pre-binds templates", () => {
@@ -39,7 +48,13 @@ describe("path params", () => {
 });
 
 describe("query serializer", () => {
-	const input = { ids: [1, 2], q: "a b", nested: { x: 1, deep: { y: true } }, date: new Date("2026-01-01T00:00:00Z"), none: null };
+	const input = {
+		ids: [1, 2],
+		q: "a b",
+		nested: { x: 1, deep: { y: true } },
+		date: new Date("2026-01-01T00:00:00Z"),
+		none: null,
+	};
 
 	it("repeats arrays and brackets nested objects by default", () => {
 		expect(createQuerySerializer()(input)).toBe(
@@ -82,7 +97,7 @@ describe("validators", () => {
 	});
 
 	it("handles async validators", async () => {
-		const asyncSchema = z.string().refine(async s => s.length > 1);
+		const asyncSchema = z.string().refine(async (s) => s.length > 1);
 		expect(await validate(asyncSchema, "ab")).toEqual({ success: true, value: "ab" });
 		expect((await validate(asyncSchema, "a")).success).toBe(false);
 		const asyncFn = schema(async (value) => {
@@ -96,7 +111,12 @@ describe("validators", () => {
 
 	it("validates synchronously when possible", () => {
 		expect(validate(z.string(), "sync")).not.toBeInstanceOf(Promise);
-		expect(validate(schema(v => String(v)), 1)).not.toBeInstanceOf(Promise);
+		expect(
+			validate(
+				schema((v) => String(v)),
+				1,
+			),
+		).not.toBeInstanceOf(Promise);
 	});
 
 	it("rejects bare functions with a hint (they are no longer accepted)", async () => {

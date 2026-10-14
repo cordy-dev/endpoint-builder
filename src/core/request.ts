@@ -1,11 +1,41 @@
 import type { AuthStrategy } from "../auth/types";
-import { type ApiError, EndpointError, type ErrorMap, type ErrorRequest, HttpError, SizeLimitError, ValidationError, type ValidationStage } from "../errors";
+import {
+	type ApiError,
+	EndpointError,
+	type ErrorMap,
+	type ErrorRequest,
+	HttpError,
+	SizeLimitError,
+	ValidationError,
+	type ValidationStage,
+} from "../errors";
 import type { Next } from "../middleware";
 import { err, ok, type Result } from "../result";
 import { IDEMPOTENT_METHODS, mergeRetry, type RetryInput } from "../retry";
 import { type InferInput, type InferOutput, type Schema, validate } from "../schema";
-import { EventStream, type NdjsonOptions, openStream, type SseMessage, type SseOptions, type StreamSpec } from "../stream";
-import type { HeadersInput, HttpMethod, HttpResponse, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, QueryInput, RequestContext, RequestInitExtras, ResponseType, Simplify } from "../types";
+import {
+	EventStream,
+	type NdjsonOptions,
+	openStream,
+	type SseMessage,
+	type SseOptions,
+	type StreamSpec,
+} from "../stream";
+import type {
+	HeadersInput,
+	HttpMethod,
+	HttpResponse,
+	OnErrorHook,
+	OnRequestHook,
+	OnResponseHook,
+	OnRetryHook,
+	OnSuccessHook,
+	QueryInput,
+	RequestContext,
+	RequestInitExtras,
+	ResponseType,
+	Simplify,
+} from "../types";
 import { type FormInput, isNativeBody, toFormData, toUrlEncoded } from "../utils/body";
 import { readBounded, withBytes } from "../utils/bounded";
 import { decodeBody, decodeErrorBody, isBodyless } from "../utils/decode";
@@ -301,12 +331,22 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 	sse(): RequestBuilder<EventStream<SseMessage>, TErrors>;
 	sse<S extends Schema>(schema: S, options?: SseOptions): RequestBuilder<EventStream<InferOutput<S>>, TErrors>;
 	sse(schema?: Schema, options?: SseOptions): RequestBuilder<EventStream<any>, TErrors> {
-		return this.#with({ responseType: "stream", responseSchema: undefined, maps: [], stream: { kind: "sse", schema, options } });
+		return this.#with({
+			responseType: "stream",
+			responseSchema: undefined,
+			maps: [],
+			stream: { kind: "sse", schema, options },
+		});
 	}
 
 	/** Read the body as newline-delimited JSON. Resolves with an async iterable of validated lines. */
 	ndjson<S extends Schema>(schema: S, options?: NdjsonOptions): RequestBuilder<EventStream<InferOutput<S>>, TErrors> {
-		return this.#with({ responseType: "stream", responseSchema: undefined, maps: [], stream: { kind: "ndjson", schema, options } });
+		return this.#with({
+			responseType: "stream",
+			responseSchema: undefined,
+			maps: [],
+			stream: { kind: "ndjson", schema, options },
+		});
 	}
 
 	// -------------------------------------------------------------------- hooks
@@ -382,11 +422,15 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 		}
 	}
 
+	// RequestBuilder is deliberately thenable: awaiting it sends the request
+	// oxlint-disable-next-line unicorn/no-thenable
 	then<R1 = TData, R2 = never>(
 		onfulfilled?: ((value: TData) => R1 | PromiseLike<R1>) | null,
 		onrejected?: ((reason: any) => R2 | PromiseLike<R2>) | null,
 	): Promise<R1 | R2> {
-		return this.send().then(response => response.data).then(onfulfilled, onrejected);
+		return this.send()
+			.then((response) => response.data)
+			.then(onfulfilled, onrejected);
 	}
 
 	catch<R = never>(onrejected?: ((reason: any) => R | PromiseLike<R>) | null): Promise<TData | R> {
@@ -430,20 +474,27 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 		}
 		const responseType = state.responseType ?? config.responseType;
 		if (!headers.has("accept")) {
-			if (state.stream) headers.set("accept", state.stream.kind === "sse" ? "text/event-stream" : "application/x-ndjson");
+			if (state.stream)
+				headers.set("accept", state.stream.kind === "sse" ? "text/event-stream" : "application/x-ndjson");
 			else if (responseType === "auto" || responseType === "json") headers.set("accept", ACCEPT_JSON);
 		}
 
 		let body: BodyInit | undefined;
 		if (state.hasBody) {
 			let value = state.body;
-			if (state.bodySchema) value = await check(state.bodySchema, value, "body", errorRequest({ method: state.method, url }));
+			if (state.bodySchema)
+				value = await check(state.bodySchema, value, "body", errorRequest({ method: state.method, url }));
 			body = encodeBody(value, state.bodyKind ?? "auto", headers);
 		}
 
 		let retry = mergeRetry(config.retry, state.retry);
 		if (state.idempotent) {
-			const options = state.idempotent === true ? {} : typeof state.idempotent === "string" ? { key: state.idempotent } : state.idempotent;
+			const options =
+				state.idempotent === true
+					? {}
+					: typeof state.idempotent === "string"
+						? { key: state.idempotent }
+						: state.idempotent;
 			const header = options.header ?? "idempotency-key";
 			if (!headers.has(header)) headers.set(header, options.key ?? randomId());
 			if (retry) {
@@ -452,7 +503,7 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 			}
 		}
 
-		const timeout = state.timeout === false ? undefined : state.timeout ?? config.timeout;
+		const timeout = state.timeout === false ? undefined : (state.timeout ?? config.timeout);
 		return {
 			url,
 			method: state.method,
@@ -462,7 +513,7 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 			timeout,
 			retry,
 			auth: state.auth ?? config.auth,
-			dedupe: state.stream ? false : state.dedupe ?? config.dedupe,
+			dedupe: state.stream ? false : (state.dedupe ?? config.dedupe),
 			init: state.init ? { ...config.init, ...state.init } : config.init,
 			attempt: 0,
 			meta: { ...state.meta },
@@ -475,7 +526,7 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 		const state = this.#state;
 		const request: ErrorRequest = errorRequest(ctx);
 		const responseType = state.responseType ?? config.responseType;
-		const maxBytes = state.maxResponseBytes === false ? undefined : state.maxResponseBytes ?? config.maxResponseBytes;
+		const maxBytes = state.maxResponseBytes === false ? undefined : (state.maxResponseBytes ?? config.maxResponseBytes);
 
 		try {
 			if (!response.ok) throw await this.#httpError(response, request, maxBytes);
@@ -505,7 +556,7 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 			}
 
 			if (responseType === "auto" || responseType === "json") {
-				const unwrap = state.unwrap === false ? undefined : state.unwrap ?? config.unwrap;
+				const unwrap = state.unwrap === false ? undefined : (state.unwrap ?? config.unwrap);
 				if (unwrap && data !== undefined) data = unwrap(data);
 			}
 			if (state.responseSchema) data = await check(state.responseSchema, data, "response", request);
@@ -520,7 +571,7 @@ export class RequestBuilder<TData = unknown, TErrors extends ErrorMap = {}> impl
 			};
 			if (state.maps?.length) {
 				for (const fn of state.maps) {
-					result.data = await fn(result.data, result) as TData;
+					result.data = (await fn(result.data, result)) as TData;
 				}
 			}
 			for (const hook of config.hooks.onSuccess) await hook(result.data, result);

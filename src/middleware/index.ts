@@ -23,7 +23,7 @@ export function compose(middleware: readonly Middleware[], terminal: Next): Next
 	for (let i = middleware.length - 1; i >= 0; i--) {
 		const current = middleware[i]!;
 		const inner = next;
-		next = ctx => current(ctx, inner);
+		next = (ctx) => current(ctx, inner);
 	}
 	return next;
 }

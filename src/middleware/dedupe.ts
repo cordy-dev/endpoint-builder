@@ -12,7 +12,9 @@ interface Inflight {
 
 function dedupeKey(ctx: RequestContext): string {
 	let key = `${ctx.method} ${ctx.url}`;
-	ctx.headers.forEach((value, name) => { key += `\n${name}:${value}`; });
+	ctx.headers.forEach((value, name) => {
+		key += `\n${name}:${value}`;
+	});
 	return key;
 }
 
@@ -26,9 +28,8 @@ export function dedupeMiddleware(): Middleware {
 	const inflight = new Map<string, Inflight>();
 
 	// non-async dispatcher: requests that are not deduped pay no extra promise
-	return (ctx, next) => !ctx.dedupe || (ctx.method !== "GET" && ctx.method !== "HEAD") || ctx.body != null
-		? next(ctx)
-		: shared(ctx, next);
+	return (ctx, next) =>
+		!ctx.dedupe || (ctx.method !== "GET" && ctx.method !== "HEAD") || ctx.body != null ? next(ctx) : shared(ctx, next);
 
 	async function shared(ctx: RequestContext, next: Next): Promise<Response> {
 		if (ctx.signal?.aborted) throw new AbortError(errorRequest(ctx), ctx.signal.reason);
@@ -37,11 +38,16 @@ export function dedupeMiddleware(): Middleware {
 		let entry = inflight.get(key);
 		if (!entry) {
 			const controller = new AbortController();
-			const sharedCtx: RequestContext = { ...ctx, headers: new Headers(ctx.headers), signal: controller.signal, meta: { ...ctx.meta } };
+			const sharedCtx: RequestContext = {
+				...ctx,
+				headers: new Headers(ctx.headers),
+				signal: controller.signal,
+				meta: { ...ctx.meta },
+			};
 			const created: Inflight = {
 				controller,
 				waiters: 0,
-				promise: next(sharedCtx).then(response => {
+				promise: next(sharedCtx).then((response) => {
 					// clones are read independently; the timeout no longer applies to them
 					releaseResponse(response);
 					return response;
@@ -71,7 +77,7 @@ export function dedupeMiddleware(): Middleware {
 			signal?.addEventListener("abort", onAbort, { once: true });
 
 			current.promise.then(
-				response => {
+				(response) => {
 					signal?.removeEventListener("abort", onAbort);
 					if (settled) return;
 					settled = true;

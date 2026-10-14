@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AbortError, computeDelay, createClient, HttpError, NetworkError, type RequestContext, TimeoutError } from "../src";
+import {
+	AbortError,
+	computeDelay,
+	createClient,
+	HttpError,
+	NetworkError,
+	type RequestContext,
+	TimeoutError,
+} from "../src";
 import { hangingFetch, json, mockFetch } from "./helpers";
 
 const fast = { delay: 0, jitter: false } as const;
@@ -66,7 +74,7 @@ describe("retry", () => {
 			baseUrl: "https://api.test",
 			fetch,
 			onRetry,
-			retry: { ...fast, shouldRetry: ({ response }) => response?.status === 409 ? true : undefined },
+			retry: { ...fast, shouldRetry: ({ response }) => (response?.status === 409 ? true : undefined) },
 		});
 		expect(await api.get("/")).toEqual({ ok: true });
 		expect(onRetry).toHaveBeenCalledWith(expect.objectContaining({ attempt: 1, delay: 0 }));
@@ -77,7 +85,9 @@ describe("retry", () => {
 		const request = {} as RequestContext;
 		expect(computeDelay({}, { attempt: 1, request, response: response("2") })).toBe(2000);
 		expect(computeDelay({ retryAfter: 1000 }, { attempt: 1, request, response: response("2") })).toBeUndefined();
-		expect(computeDelay({ retryAfter: false, delay: 100, jitter: false }, { attempt: 3, request, response: response("2") })).toBe(400);
+		expect(
+			computeDelay({ retryAfter: false, delay: 100, jitter: false }, { attempt: 3, request, response: response("2") }),
+		).toBe(400);
 	});
 
 	it("computes backoff variants", () => {
@@ -114,7 +124,9 @@ describe("timeout & abort", () => {
 	it("retries timeouts", async () => {
 		let calls = 0;
 		const slow = hangingFetch();
-		const fetch = vi.fn((url: string, init: RequestInit) => ++calls === 1 ? slow(url, init) : Promise.resolve(json({ ok: true })));
+		const fetch = vi.fn((url: string, init: RequestInit) =>
+			++calls === 1 ? slow(url, init) : Promise.resolve(json({ ok: true })),
+		);
 		const api = createClient({ baseUrl: "https://api.test", fetch, timeout: 20, retry: fast });
 		expect(await api.get("/")).toEqual({ ok: true });
 	});
@@ -123,7 +135,7 @@ describe("timeout & abort", () => {
 		const fetch = vi.fn((_url: string, init: RequestInit) => {
 			const body = new ReadableStream({
 				start(controller) {
-					controller.enqueue(new TextEncoder().encode("{\"a\":"));
+					controller.enqueue(new TextEncoder().encode('{"a":'));
 					init.signal?.addEventListener("abort", () => controller.error(init.signal!.reason));
 				},
 			});
@@ -166,7 +178,7 @@ describe("timeout & abort", () => {
 describe("dedupe", () => {
 	it("shares one call between identical concurrent GETs", async () => {
 		const fetch = mockFetch(async () => {
-			await new Promise(r => setTimeout(r, 10));
+			await new Promise((r) => setTimeout(r, 10));
 			return json({ n: 1 });
 		});
 		const api = createClient({ baseUrl: "https://api.test", fetch, dedupe: true });
@@ -192,7 +204,7 @@ describe("dedupe", () => {
 
 	it("one caller aborting does not cancel the others", async () => {
 		const fetch = mockFetch(async () => {
-			await new Promise(r => setTimeout(r, 20));
+			await new Promise((r) => setTimeout(r, 20));
 			return json({ ok: true });
 		});
 		const api = createClient({ baseUrl: "https://api.test", fetch, dedupe: true });
@@ -207,7 +219,11 @@ describe("dedupe", () => {
 
 describe("transport", () => {
 	it("NetworkError message includes method and URL", async () => {
-		const api = createClient({ baseUrl: "https://api.test", fetch: () => Promise.reject(new TypeError("ECONNREFUSED")), retry: false });
+		const api = createClient({
+			baseUrl: "https://api.test",
+			fetch: () => Promise.reject(new TypeError("ECONNREFUSED")),
+			retry: false,
+		});
 		const { error } = await api.get("/x").safe();
 		expect(error).toBeInstanceOf(NetworkError);
 		expect(error!.message).toContain("GET https://api.test/x");

@@ -20,17 +20,18 @@ function paren(code: Code, min: 1 | 2): string {
 }
 
 function union(members: Code[]): Code {
-	const unique = [...new Set(members.map(member => paren(member, 1)))];
+	const unique = [...new Set(members.map((member) => paren(member, 1)))];
 	return unique.length === 1 ? atom(unique[0]!) : { text: unique.join(" | "), prec: 0 };
 }
 
 function intersection(members: Code[]): Code {
-	const unique = [...new Set(members.map(member => paren(member, 2)))];
+	const unique = [...new Set(members.map((member) => paren(member, 2)))];
 	return unique.length === 1 ? atom(unique[0]!) : { text: unique.join(" & "), prec: 1 };
 }
 
 function literal(value: unknown): Code {
-	if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") return atom(JSON.stringify(value));
+	if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+		return atom(JSON.stringify(value));
 	return atom("unknown");
 }
 
@@ -49,9 +50,9 @@ export function jsDoc(schema: JsonSchema | boolean, level = 0, extra: readonly s
 	if (schema.deprecated) lines.push("@deprecated");
 	if (lines.length === 0) return "";
 	const pad = indentOf(level);
-	const clean = lines.map(line => line.replace(/\*\//g, "*\\/").trimEnd());
+	const clean = lines.map((line) => line.replace(/\*\//g, "*\\/").trimEnd());
 	if (clean.length === 1 && !clean[0]!.startsWith("@")) return `${pad}/** ${clean[0]} */\n`;
-	return `${pad}/**\n${clean.map(line => `${pad} * ${line}`.trimEnd()).join("\n")}\n${pad} */\n`;
+	return `${pad}/**\n${clean.map((line) => `${pad} * ${line}`.trimEnd()).join("\n")}\n${pad} */\n`;
 }
 
 function objectType(schema: JsonSchema, ctx: TypeContext, level: number): Code {
@@ -61,7 +62,9 @@ function objectType(schema: JsonSchema, ctx: TypeContext, level: number): Code {
 	const members: string[] = [];
 
 	for (const [name, child] of Object.entries(properties)) {
-		members.push(`${jsDoc(child, level + 1)}${pad}${propertyKey(name)}${required.has(name) ? "" : "?"}: ${emit(child, ctx, level + 1).text};`);
+		members.push(
+			`${jsDoc(child, level + 1)}${pad}${propertyKey(name)}${required.has(name) ? "" : "?"}: ${emit(child, ctx, level + 1).text};`,
+		);
 	}
 	for (const name of required) {
 		if (!(name in properties)) members.push(`${pad}${propertyKey(name)}: unknown;`); // required here, described by another part of an allOf
@@ -82,8 +85,9 @@ function objectType(schema: JsonSchema, ctx: TypeContext, level: number): Code {
 
 function arrayType(schema: JsonSchema, ctx: TypeContext, level: number): Code {
 	if (schema.prefixItems) {
-		const items = schema.prefixItems.map(item => emit(item, ctx, level).text);
-		if (schema.items !== undefined && schema.items !== false) items.push(`...${paren(emit(schema.items, ctx, level), 2)}[]`);
+		const items = schema.prefixItems.map((item) => emit(item, ctx, level).text);
+		if (schema.items !== undefined && schema.items !== false)
+			items.push(`...${paren(emit(schema.items, ctx, level), 2)}[]`);
 		return atom(`[${items.join(", ")}]`);
 	}
 	const item = schema.items === undefined || schema.items === true ? atom("unknown") : emit(schema.items, ctx, level);
@@ -92,20 +96,32 @@ function arrayType(schema: JsonSchema, ctx: TypeContext, level: number): Code {
 
 function typeFor(type: string, schema: JsonSchema, ctx: TypeContext, level: number): Code {
 	switch (type) {
-		case "string": return atom(schema.format === "binary" ? "Blob" : "string");
+		case "string":
+			return atom(schema.format === "binary" ? "Blob" : "string");
 		case "number":
-		case "integer": return atom("number");
-		case "boolean": return atom("boolean");
-		case "null": return atom("null");
-		case "array": return arrayType(schema, ctx, level);
-		case "object": return objectType(schema, ctx, level);
-		default: return atom("unknown");
+		case "integer":
+			return atom("number");
+		case "boolean":
+			return atom("boolean");
+		case "null":
+			return atom("null");
+		case "array":
+			return arrayType(schema, ctx, level);
+		case "object":
+			return objectType(schema, ctx, level);
+		default:
+			return atom("unknown");
 	}
 }
 
 /** `{ type: "object" }` that only exists to host an allOf/oneOf: it adds nothing to the type */
 function isEmptyObject(schema: JsonSchema): boolean {
-	return schema.type === "object" && !schema.properties && !schema.required?.length && schema.additionalProperties === undefined;
+	return (
+		schema.type === "object" &&
+		!schema.properties &&
+		!schema.required?.length &&
+		schema.additionalProperties === undefined
+	);
 }
 
 function emit(schema: JsonSchema | boolean, ctx: TypeContext, level: number): Code {
@@ -118,9 +134,12 @@ function emit(schema: JsonSchema | boolean, ctx: TypeContext, level: number): Co
 
 	const combinators: Code[] = [];
 	for (const member of schema.allOf ?? []) combinators.push(emit(member, ctx, level));
-	const alternatives = [...(schema.oneOf ?? []), ...(schema.anyOf ?? [])].map(member => emit(member, ctx, level));
+	const alternatives = [...(schema.oneOf ?? []), ...(schema.anyOf ?? [])].map((member) => emit(member, ctx, level));
 	if (schema.oneOf && schema.anyOf) {
-		combinators.push(union(schema.oneOf.map(member => emit(member, ctx, level))), union(schema.anyOf.map(member => emit(member, ctx, level))));
+		combinators.push(
+			union(schema.oneOf.map((member) => emit(member, ctx, level))),
+			union(schema.anyOf.map((member) => emit(member, ctx, level))),
+		);
 	} else if (alternatives.length > 0) {
 		combinators.push(union(alternatives));
 	}
@@ -131,7 +150,7 @@ function emit(schema: JsonSchema | boolean, ctx: TypeContext, level: number): Co
 	else if (schema.type !== undefined) {
 		const types = Array.isArray(schema.type) ? schema.type : [schema.type];
 		const skipEmpty = combinators.length > 0 && isEmptyObject(schema);
-		if (!skipEmpty) base = union(types.map(type => typeFor(type, schema, ctx, level)));
+		if (!skipEmpty) base = union(types.map((type) => typeFor(type, schema, ctx, level)));
 	} else if (schema.properties || schema.required?.length || schema.additionalProperties !== undefined) {
 		base = objectType(schema, ctx, level);
 	} else if (schema.items !== undefined || schema.prefixItems) {
@@ -152,6 +171,7 @@ export function schemaToType(schema: JsonSchema | boolean, ctx: TypeContext, lev
 export function declareType(name: string, schema: JsonSchema | boolean, ctx: TypeContext): string {
 	const code = emit(schema, ctx, 0);
 	const doc = jsDoc(schema, 0);
-	const plainObject = typeof schema === "object" && schema.$ref === undefined && code.prec === 2 && code.text.startsWith("{");
+	const plainObject =
+		typeof schema === "object" && schema.$ref === undefined && code.prec === 2 && code.text.startsWith("{");
 	return plainObject ? `${doc}export interface ${name} ${code.text}` : `${doc}export type ${name} = ${code.text};`;
 }

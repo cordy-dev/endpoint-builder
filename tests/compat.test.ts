@@ -31,14 +31,24 @@ const libraries = {
 
 describe.each(Object.entries(libraries))("%s", (_name, s) => {
 	const contract = defineContract({
-		get: endpoint.get("/users/:id").returns(s.User as typeof libraries.zod.User).errors({ 404: s.Problem as typeof libraries.zod.Problem }),
-		list: endpoint.get("/users").query(s.Query as typeof libraries.zod.Query).returns(z.array(z.object({ id: z.number(), name: z.string() }))),
-		create: endpoint.post("/users").body(s.Create as typeof libraries.zod.Create).returns(s.User as typeof libraries.zod.User),
+		get: endpoint
+			.get("/users/:id")
+			.returns(s.User as typeof libraries.zod.User)
+			.errors({ 404: s.Problem as typeof libraries.zod.Problem }),
+		list: endpoint
+			.get("/users")
+			.query(s.Query as typeof libraries.zod.Query)
+			.returns(z.array(z.object({ id: z.number(), name: z.string() }))),
+		create: endpoint
+			.post("/users")
+			.body(s.Create as typeof libraries.zod.Create)
+			.returns(s.User as typeof libraries.zod.User),
 	});
 
 	it("validates responses, bodies, queries and error bodies", async () => {
 		const api = mockClient(contract, {
-			get: ({ params }, { fail }) => params.id === "0" ? fail(404, { message: "no user" }) : { id: Number(params.id), name: "Ann" },
+			get: ({ params }, { fail }) =>
+				params.id === "0" ? fail(404, { message: "no user" }) : { id: Number(params.id), name: "Ann" },
 			list: ({ query }) => [{ id: Number(query.page ?? 0), name: "a" }],
 			create: ({ body }) => ({ id: 1, name: body.name }),
 		});
@@ -60,7 +70,9 @@ describe.each(Object.entries(libraries))("%s", (_name, s) => {
 		const api = createClient({ baseUrl: "https://api.test", fetch: mockFetch(json({ id: "1", name: "a" })) });
 		const { error } = await api.get("/users/1").returns(s.User).safe();
 		expect(error).toBeInstanceOf(ValidationError);
-		expect(Array.from((error as ValidationError).issues[0]!.path ?? [], p => typeof p === "object" ? p.key : p)).toEqual(["id"]);
+		expect(
+			Array.from((error as ValidationError).issues[0]!.path ?? [], (p) => (typeof p === "object" ? p.key : p)),
+		).toEqual(["id"]);
 		expect((error as ValidationError).message).toMatch(/^Invalid response at "id"/);
 	});
 });

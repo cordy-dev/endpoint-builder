@@ -1,9 +1,25 @@
+# https://editorconfig.org
+# oxfmt reads this file, so it is the source of truth for indentation, line endings and the final newline.
 root = true
 
 [*]
 charset = utf-8
 end_of_line = lf
+indent_style = tab
 indent_size = 4
-indent_style = space
-insert_final_newline = false
+insert_final_newline = true
 trim_trailing_whitespace = true
+max_line_length = 120
+
+[*.{json,jsonc,yml,yaml,md}]
+indent_style = space
+indent_size = 2
+
+# two trailing spaces are a line break in Markdown
+[*.md]
+trim_trailing_whitespace = false
+
+# generated
+[{llms-full.txt,bun.lock}]
+insert_final_newline = unset
+trim_trailing_whitespace = unset

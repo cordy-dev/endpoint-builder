@@ -58,7 +58,14 @@ describe("README", () => {
 		const api = Client.builder("https://api.test")
 			.header("X-App", "web")
 			.timeout(10_000)
-			.auth(refreshable({ getToken: () => token, refresh: () => { token = "b"; } }))
+			.auth(
+				refreshable({
+					getToken: () => token,
+					refresh: () => {
+						token = "b";
+					},
+				}),
+			)
 			.retry({ limit: 3 })
 			.use(timing)
 			.fetch(fetch)
@@ -75,7 +82,10 @@ describe("README", () => {
 		const user = await api.users.create({ body: { name: "Ann", email: "a@b.co" } });
 		expectTypeOf(user).toEqualTypeOf<{ id: number; name: string }>();
 		await api.users.list();
-		await api.users.get({ params: { id: 1 } }).timeout(1000).safe();
+		await api.users
+			.get({ params: { id: 1 } })
+			.timeout(1000)
+			.safe();
 		expect(fetch.calls[0]!.headers.get("authorization")).toBe("Bearer token");
 	});
 });

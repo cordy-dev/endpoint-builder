@@ -1,4 +1,12 @@
-import { AbortError, EndpointError, type ErrorRequest, NetworkError, ParseError, SizeLimitError, ValidationError } from "../errors";
+import {
+	AbortError,
+	EndpointError,
+	type ErrorRequest,
+	NetworkError,
+	ParseError,
+	SizeLimitError,
+	ValidationError,
+} from "../errors";
 import { type Schema, validate } from "../schema";
 
 /** A raw Server-Sent Event */
@@ -54,7 +62,10 @@ export class EventStream<T> implements AsyncIterable<T> {
 	readonly #reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
 	/** @internal */
-	constructor(iterator: AsyncGenerator<T, void, undefined>, reader: ReadableStreamDefaultReader<Uint8Array> | undefined) {
+	constructor(
+		iterator: AsyncGenerator<T, void, undefined>,
+		reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
+	) {
 		this.#iterator = iterator;
 		this.#reader = reader;
 	}
@@ -156,10 +167,18 @@ async function* readSse(reader: ByteReader): AsyncGenerator<SseMessage, void, un
 		if (value.startsWith(" ")) value = value.slice(1);
 
 		switch (field) {
-			case "data": data.push(value); break;
-			case "event": event = value; break;
-			case "id": if (!value.includes("\0")) lastId = value; break;
-			case "retry": if (/^\d+$/.test(value)) retry = Number(value); break;
+			case "data":
+				data.push(value);
+				break;
+			case "event":
+				event = value;
+				break;
+			case "id":
+				if (!value.includes("\0")) lastId = value;
+				break;
+			case "retry":
+				if (/^\d+$/.test(value)) retry = Number(value);
+				break;
 		}
 	}
 	// an event that is not terminated by a blank line is discarded, as the spec says
@@ -181,9 +200,20 @@ function toError(error: unknown, signal: AbortSignal | undefined, request: Error
 }
 
 /** @internal turn a successful response into a typed stream */
-export function openStream(response: Response, request: ErrorRequest, signal: AbortSignal | undefined, spec: StreamSpec): EventStream<any> {
+export function openStream(
+	response: Response,
+	request: ErrorRequest,
+	signal: AbortSignal | undefined,
+	spec: StreamSpec,
+): EventStream<any> {
 	const reader = response.body?.getReader();
-	if (!reader) return new EventStream((async function* () { /* empty body */ })(), undefined);
+	if (!reader)
+		return new EventStream(
+			(async function* () {
+				/* empty body */
+			})(),
+			undefined,
+		);
 
 	const { schema, options } = spec;
 	const skip = options?.onInvalid === "skip";
@@ -196,7 +226,12 @@ export function openStream(response: Response, request: ErrorRequest, signal: Ab
 			json = JSON.parse(text);
 		} catch (cause) {
 			if (skip) return undefined;
-			throw new ParseError(`Malformed JSON in ${spec.kind === "sse" ? "event" : "line"} (${request.method} ${request.url})`, text, request, cause);
+			throw new ParseError(
+				`Malformed JSON in ${spec.kind === "sse" ? "event" : "line"} (${request.method} ${request.url})`,
+				text,
+				request,
+				cause,
+			);
 		}
 		if (!schema) return { value: json };
 		let outcome = validate(schema, json);

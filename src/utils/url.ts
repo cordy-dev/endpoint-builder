@@ -30,15 +30,21 @@ export function redactUrl(url: string): string {
 	const hash = url.indexOf("#", start);
 	const end = hash === -1 ? url.length : hash;
 
-	const query = url.slice(start + 1, end).split("&").map((pair) => {
-		const eq = pair.indexOf("=");
-		if (eq === -1) return pair;
-		let name = pair.slice(0, eq);
-		try {
-			name = decodeURIComponent(name);
-		} catch { /* keep the raw name */ }
-		return SENSITIVE_PARAM.test(name) ? `${pair.slice(0, eq)}=***` : pair;
-	}).join("&");
+	const query = url
+		.slice(start + 1, end)
+		.split("&")
+		.map((pair) => {
+			const eq = pair.indexOf("=");
+			if (eq === -1) return pair;
+			let name = pair.slice(0, eq);
+			try {
+				name = decodeURIComponent(name);
+			} catch {
+				/* keep the raw name */
+			}
+			return SENSITIVE_PARAM.test(name) ? `${pair.slice(0, eq)}=***` : pair;
+		})
+		.join("&");
 	return url.slice(0, start + 1) + query + url.slice(end);
 }
 

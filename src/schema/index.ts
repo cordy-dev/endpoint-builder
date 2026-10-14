@@ -32,7 +32,7 @@ export function isStandardSchema(value: unknown): value is StandardSchemaV1 {
 function issuesFromThrown(error: unknown): readonly Issue[] {
 	// zod-like errors carry `issues`; keep them when they look right
 	const issues = (error as { issues?: unknown })?.issues;
-	if (Array.isArray(issues) && issues.every(i => typeof i?.message === "string")) {
+	if (Array.isArray(issues) && issues.every((i) => typeof i?.message === "string")) {
 		return issues as Issue[];
 	}
 	return [{ message: error instanceof Error ? error.message : String(error) }];
@@ -58,9 +58,9 @@ export function schema<Output>(fn: (value: unknown) => Output | Promise<Output>)
 					const output = fn(value);
 					return output instanceof Promise
 						? output.then(
-							(v): StandardSchemaV1.Result<Output> => ({ value: v }),
-							(e: unknown): StandardSchemaV1.Result<Output> => ({ issues: issuesFromThrown(e) }),
-						)
+								(v): StandardSchemaV1.Result<Output> => ({ value: v }),
+								(e: unknown): StandardSchemaV1.Result<Output> => ({ issues: issuesFromThrown(e) }),
+							)
 						: { value: output };
 				} catch (error) {
 					return { issues: issuesFromThrown(error) };
@@ -71,26 +71,33 @@ export function schema<Output>(fn: (value: unknown) => Output | Promise<Output>)
 }
 
 function fromStandardResult<T>(result: StandardSchemaV1.Result<T>): ValidationOutcome<T> {
-	return result.issues
-		? { success: false, issues: result.issues }
-		: { success: true, value: result.value };
+	return result.issues ? { success: false, issues: result.issues } : { success: true, value: result.value };
 }
 
 /**
  * Run a Standard Schema against a value.
  * Stays synchronous for synchronous validators (no extra microtask) and never throws.
  */
-export function validate<T>(schema: Schema<unknown, T>, value: unknown): ValidationOutcome<T> | Promise<ValidationOutcome<T>> {
+export function validate<T>(
+	schema: Schema<unknown, T>,
+	value: unknown,
+): ValidationOutcome<T> | Promise<ValidationOutcome<T>> {
 	if (!isStandardSchema(schema)) {
 		return {
 			success: false,
-			issues: [{ message: "Not a Standard Schema. Use zod, valibot, arktype, ... or wrap a function with schema(fn)." }],
+			issues: [
+				{ message: "Not a Standard Schema. Use zod, valibot, arktype, ... or wrap a function with schema(fn)." },
+			],
 		};
 	}
 	try {
 		const result = schema["~standard"].validate(value);
 		if (result instanceof Promise) {
-			return result.then(fromStandardResult, (e: unknown) => ({ success: false as const, issues: issuesFromThrown(e), cause: e }));
+			return result.then(fromStandardResult, (e: unknown) => ({
+				success: false as const,
+				issues: issuesFromThrown(e),
+				cause: e,
+			}));
 		}
 		return fromStandardResult(result);
 	} catch (error) {

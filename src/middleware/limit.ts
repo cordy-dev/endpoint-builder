@@ -86,10 +86,13 @@ export class Limiter {
 
 	#wake(ms: number): void {
 		if (this.#timer) return;
-		this.#timer = setTimeout(() => {
-			this.#timer = undefined;
-			this.#pump();
-		}, Math.max(ms, 1));
+		this.#timer = setTimeout(
+			() => {
+				this.#timer = undefined;
+				this.#pump();
+			},
+			Math.max(ms, 1),
+		);
 	}
 }
 

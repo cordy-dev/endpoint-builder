@@ -6,12 +6,41 @@ import { compose, type Middleware, type Next } from "../middleware";
 import { dedupeMiddleware } from "../middleware/dedupe";
 import { createLimiter, limitMiddleware, type RateLimit } from "../middleware/limit";
 import { mergeRetry, normalizeRetry, type RetryInput, retryMiddleware } from "../retry";
-import type { HeadersInput, HttpMethod, QueryInput, QueryObject, RequestContext, RequestInitExtras, ResponseType } from "../types";
+import type {
+	HeadersInput,
+	HttpMethod,
+	QueryInput,
+	QueryObject,
+	RequestContext,
+	RequestInitExtras,
+	ResponseType,
+} from "../types";
 import { toHeaderRecord } from "../utils/headers";
 import type { HasRequiredParams, PathParams } from "../utils/path";
-import { createQuerySerializer, defaultQuerySerializer, type QuerySerializer, type QuerySerializerOptions } from "../utils/query";
-import type { ClientConfig, Hooks, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, Unwrap } from "./config";
-import { type ClientCore, type ErrorSchemas, type InferErrors, type MergeErrors, RequestBuilder, type RequestState } from "./request";
+import {
+	createQuerySerializer,
+	defaultQuerySerializer,
+	type QuerySerializer,
+	type QuerySerializerOptions,
+} from "../utils/query";
+import type {
+	ClientConfig,
+	Hooks,
+	OnErrorHook,
+	OnRequestHook,
+	OnResponseHook,
+	OnRetryHook,
+	OnSuccessHook,
+	Unwrap,
+} from "./config";
+import {
+	type ClientCore,
+	type ErrorSchemas,
+	type InferErrors,
+	type MergeErrors,
+	RequestBuilder,
+	type RequestState,
+} from "./request";
 import { createTransport } from "./transport";
 
 // ------------------------------------------------------------------ options
@@ -89,7 +118,7 @@ const DEFAULT_CONFIG: ClientConfig = {
 };
 
 function many<T>(value: OneOrMany<T> | undefined): readonly T[] {
-	return value === undefined ? [] : Array.isArray(value) ? value as readonly T[] : [value as T];
+	return value === undefined ? [] : Array.isArray(value) ? (value as readonly T[]) : [value as T];
 }
 
 function toAuth(auth: AuthStrategy | string | false): AuthStrategy | false {
@@ -112,7 +141,7 @@ function applyOptions(base: ClientConfig, options: ClientOptions): ClientConfig 
 		baseUrl: options.baseUrl ?? base.baseUrl,
 		headers: options.headers ? { ...base.headers, ...toHeaderRecord(options.headers) } : base.headers,
 		query: options.query ? { ...base.query, ...options.query } : base.query,
-		timeout: options.timeout === false ? undefined : options.timeout ?? base.timeout,
+		timeout: options.timeout === false ? undefined : (options.timeout ?? base.timeout),
 		retry: options.retry === undefined ? base.retry : mergeRetry(base.retry, options.retry),
 		auth: options.auth === undefined ? base.auth : toAuth(options.auth),
 		dedupe: options.dedupe ?? base.dedupe,
@@ -120,9 +149,12 @@ function applyOptions(base: ClientConfig, options: ClientOptions): ClientConfig 
 		middleware: options.middleware ? [...base.middleware, ...options.middleware] : base.middleware,
 		hooks,
 		unwrap: options.unwrap ?? base.unwrap,
-		querySerializer: options.querySerializer === undefined ? base.querySerializer
-			: typeof options.querySerializer === "function" ? options.querySerializer
-				: createQuerySerializer(options.querySerializer),
+		querySerializer:
+			options.querySerializer === undefined
+				? base.querySerializer
+				: typeof options.querySerializer === "function"
+					? options.querySerializer
+					: createQuerySerializer(options.querySerializer),
 		errors: options.errors ? { ...base.errors, ...options.errors } : base.errors,
 		init: options.init ? { ...base.init, ...options.init } : base.init,
 		responseType: options.responseType ?? base.responseType,
@@ -292,7 +324,9 @@ type BodyRequestOptions = BaseRequestOptions & {
 
 type ParamsOption<P extends string> = string extends P
 	? { params?: Record<string, string | number | bigint | boolean> }
-	: HasRequiredParams<P> extends true ? { params: PathParams<P> } : { params?: PathParams<P> };
+	: HasRequiredParams<P> extends true
+		? { params: PathParams<P> }
+		: { params?: PathParams<P> };
 
 /** Options for requests without a body */
 export type RequestOptions<P extends string> = BaseRequestOptions & ParamsOption<P>;
@@ -311,7 +345,13 @@ export class Client<TErrors extends ErrorMap = {}> {
 	constructor(config: ClientConfig = DEFAULT_CONFIG) {
 		const { hooks } = config;
 		const layers: Middleware[] = [];
-		layers.push(hooksMiddleware(hooks), dedupeMiddleware(), ...config.middleware, retryMiddleware(hooks.onRetry), authMiddleware());
+		layers.push(
+			hooksMiddleware(hooks),
+			dedupeMiddleware(),
+			...config.middleware,
+			retryMiddleware(hooks.onRetry),
+			authMiddleware(),
+		);
 		if (config.limiter) layers.push(limitMiddleware(config.limiter)); // innermost: counts every network attempt
 		this.#core = { config, pipeline: compose(layers, createTransport(config.fetch)) };
 		cores.set(this, this.#core);
@@ -328,7 +368,11 @@ export class Client<TErrors extends ErrorMap = {}> {
 		return this.#core.config;
 	}
 
-	#request(method: HttpMethod, path: string, options: (BodyRequestOptions & { params?: Record<string, unknown> }) | undefined): RequestBuilder<unknown, TErrors> {
+	#request(
+		method: HttpMethod,
+		path: string,
+		options: (BodyRequestOptions & { params?: Record<string, unknown> }) | undefined,
+	): RequestBuilder<unknown, TErrors> {
 		const state: RequestState = { method, path };
 		if (!options) return new RequestBuilder(this.#core, state);
 		const { params, query, headers, signal, timeout, json, body } = options;
@@ -339,8 +383,11 @@ export class Client<TErrors extends ErrorMap = {}> {
 			signal,
 			...(headers ? { headers: [headers] } : {}),
 			...(timeout !== undefined ? { timeout } : {}),
-			...(json !== undefined ? { hasBody: true, body: json, bodyKind: "json" as const }
-				: body !== undefined ? { hasBody: true, body, bodyKind: "auto" as const } : {}),
+			...(json !== undefined
+				? { hasBody: true, body: json, bodyKind: "json" as const }
+				: body !== undefined
+					? { hasBody: true, body, bodyKind: "auto" as const }
+					: {}),
 		});
 	}
 
@@ -373,7 +420,11 @@ export class Client<TErrors extends ErrorMap = {}> {
 	}
 
 	/** Request with an arbitrary method */
-	request<P extends string>(method: HttpMethod, path: P, ...[options]: Args<P, BodyOptions<P>>): RequestBuilder<unknown, TErrors> {
+	request<P extends string>(
+		method: HttpMethod,
+		path: P,
+		...[options]: Args<P, BodyOptions<P>>
+	): RequestBuilder<unknown, TErrors> {
 		return this.#request(method, path, options);
 	}
 
@@ -386,7 +437,7 @@ export class Client<TErrors extends ErrorMap = {}> {
 /** Client hooks first, then the hooks attached to the request (`ctx.hooks`) */
 function hooksMiddleware(hooks: Hooks): Middleware {
 	// non-async dispatcher: requests without hooks pay no extra promise
-	return (ctx, next) => hooks.onRequest.length || hooks.onResponse.length || ctx.hooks ? run(ctx, next) : next(ctx);
+	return (ctx, next) => (hooks.onRequest.length || hooks.onResponse.length || ctx.hooks ? run(ctx, next) : next(ctx));
 
 	async function run(ctx: RequestContext, next: Next): Promise<Response> {
 		for (const hook of hooks.onRequest) await hook(ctx);
@@ -433,7 +484,8 @@ export type Api<C, TErrors extends ErrorMap = {}> = BoundContract<C, TErrors> & 
 
 function bindApi<C extends Contract, E extends ErrorMap>(client: Client<E>, contract: C): Api<C, E> {
 	for (const reserved of ["$client", "$with"]) {
-		if (reserved in contract) throw new TypeError(`"${reserved}" is reserved by createApi and cannot be a contract key`);
+		if (reserved in contract)
+			throw new TypeError(`"${reserved}" is reserved by createApi and cannot be a contract key`);
 	}
 	const api = bindContract(cores.get(client)!, contract) as Record<string, unknown>;
 	Object.defineProperties(api, {
@@ -453,6 +505,9 @@ function bindApi<C extends Contract, E extends ErrorMap>(client: Client<E>, cont
  * const admin = api.$with({ headers: { "X-Role": "admin" } });
  * ```
  */
-export function createApi<const C extends Contract, const O extends ClientOptions = {}>(contract: C, options?: O): Api<C, ErrorsOf<O>> {
-	return bindApi(createClient(options ?? ({} as O)), contract) as unknown as Api<C, ErrorsOf<O>>;
+export function createApi<const C extends Contract, const O extends ClientOptions = {}>(
+	contract: C,
+	options?: O,
+): Api<C, ErrorsOf<O>> {
+	return bindApi(createClient(options ?? ({} as O)), contract);
 }

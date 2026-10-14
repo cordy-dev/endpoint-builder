@@ -35,21 +35,25 @@ export function typecheck(files: Record<string, string>, options: TypecheckOptio
 		getSourceFile: host.getSourceFile.bind(host),
 	};
 	// module resolution only looks inside directories that exist
-	host.directoryExists = dir => dir === "/virtual" || dir === "/virtual/" || real.directoryExists?.(dir) === true;
-	host.fileExists = file => virtual.has(file) || real.fileExists(file);
-	host.readFile = file => virtual.get(file) ?? real.readFile(file);
+	host.directoryExists = (dir) => dir === "/virtual" || dir === "/virtual/" || real.directoryExists?.(dir) === true;
+	host.fileExists = (file) => virtual.has(file) || real.fileExists(file);
+	host.readFile = (file) => virtual.get(file) ?? real.readFile(file);
 	host.getSourceFile = (file, languageVersion, ...rest) => {
 		const text = virtual.get(file);
-		return text === undefined ? real.getSourceFile(file, languageVersion, ...rest) : ts.createSourceFile(file, text, languageVersion);
+		return text === undefined
+			? real.getSourceFile(file, languageVersion, ...rest)
+			: ts.createSourceFile(file, text, languageVersion);
 	};
 
 	const program = ts.createProgram([...virtual.keys()], compilerOptions, host);
-	return ts.getPreEmitDiagnostics(program)
-		.filter(diagnostic => diagnostic.file === undefined || virtual.has(diagnostic.file.fileName))
+	return ts
+		.getPreEmitDiagnostics(program)
+		.filter((diagnostic) => diagnostic.file === undefined || virtual.has(diagnostic.file.fileName))
 		.map((diagnostic) => {
-			const where = diagnostic.file && diagnostic.start !== undefined
-				? `${diagnostic.file.fileName.replace(root, "")}:${diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line + 1}`
-				: "global";
+			const where =
+				diagnostic.file && diagnostic.start !== undefined
+					? `${diagnostic.file.fileName.replace(root, "")}:${diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line + 1}`
+					: "global";
 			return `${where} TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`;
 		});
 }

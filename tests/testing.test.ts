@@ -11,7 +11,10 @@ const Event = z.object({ n: z.number() });
 
 const contract = defineContract({
 	users: {
-		list: endpoint.get("/users").query(z.object({ tag: z.array(z.string()).optional(), page: z.number().optional() })).returns(z.array(User)),
+		list: endpoint
+			.get("/users")
+			.query(z.object({ tag: z.array(z.string()).optional(), page: z.number().optional() }))
+			.returns(z.array(User)),
 		get: endpoint.get("/users/:id").returns(User).errors({ 404: NotFound }),
 		create: endpoint.post("/users").body(CreateUser).returns(User),
 		remove: endpoint.delete("/users/:id"),
@@ -88,7 +91,9 @@ describe("mockClient", () => {
 		const wrong = await api.users.get({ params: { id: 1 } }).safe();
 		expect((wrong.error as ValidationError).stage).toBe("response");
 
-		const brokenError = mockClient(contract, { users: { get: (_input, { fail }) => fail(404, { unexpected: true } as never) } });
+		const brokenError = mockClient(contract, {
+			users: { get: (_input, { fail }) => fail(404, { unexpected: true } as never) },
+		});
 		const { error } = await brokenError.users.get({ params: { id: 1 } }).safe();
 		expect((error as ValidationError).stage).toBe("error");
 	});
@@ -97,9 +102,18 @@ describe("mockClient", () => {
 		const seen: unknown[] = [];
 		const api = mockClient(contract, {
 			users: {
-				get: ({ params }) => { seen.push(params); return { id: 1, name: "a" }; },
-				list: ({ query }) => { seen.push(query); return []; },
-				create: ({ body, headers }) => { seen.push([body, headers.get("content-type")]); return { id: 2, name: body.name }; },
+				get: ({ params }) => {
+					seen.push(params);
+					return { id: 1, name: "a" };
+				},
+				list: ({ query }) => {
+					seen.push(query);
+					return [];
+				},
+				create: ({ body, headers }) => {
+					seen.push([body, headers.get("content-type")]);
+					return { id: 2, name: body.name };
+				},
 			},
 		});
 		await api.users.get({ params: { id: "a b/c" } });
@@ -119,7 +133,7 @@ describe("mockClient", () => {
 		});
 		expect(await api.users.search()).toEqual([{ id: 0, name: "search" }]);
 		expect(await api.users.get({ params: { id: 5 } })).toEqual({ id: 5, name: "by-id" });
-		expect(await api.users.avatar({ params: { id: 5 } }).text()).toBe("\"avatar-5\"");
+		expect(await api.users.avatar({ params: { id: 5 } }).text()).toBe('"avatar-5"');
 		expect(await api.files.get()).toEqual({ name: "index" });
 		expect(await api.files.get({ params: { name: "a.txt" } })).toEqual({ name: "a.txt" });
 	});
@@ -134,7 +148,10 @@ describe("mockClient", () => {
 	});
 
 	it("mocks SSE and NDJSON streams with plain iterables", async () => {
-		async function* generate() { yield { n: 1 }; yield { n: 2 }; }
+		async function* generate() {
+			yield { n: 1 };
+			yield { n: 2 };
+		}
 		const api = mockClient(contract, {
 			events: () => generate(),
 			export: () => [{ n: 1 }, { n: 2 }, { n: 3 }],
@@ -142,20 +159,38 @@ describe("mockClient", () => {
 		});
 		expect(await (await api.events()).toArray()).toEqual([{ n: 1 }, { n: 2 }]);
 		expect(await (await api.export()).toArray()).toEqual([{ n: 1 }, { n: 2 }, { n: 3 }]);
-		expect(await (await api.log()).toArray()).toMatchObject([{ event: "tick", data: "a\nb", id: "1" }, { event: "message", data: "plain" }]);
+		expect(await (await api.log()).toArray()).toMatchObject([
+			{ event: "tick", data: "a\nb", id: "1" },
+			{ event: "message", data: "plain" },
+		]);
 	});
 
 	it("honours client options: baseUrl with a path prefix, auth, default errors", async () => {
 		const seen: (string | null)[] = [];
-		const api = mockClient(contract, {
-			users: { get: ({ headers }) => { seen.push(headers.get("authorization")); return { id: 1, name: "a" }; } },
-		}, { baseUrl: "https://api.test/v2", auth: bearer("t"), errors: { 401: z.object({ reason: z.string() }) } });
+		const api = mockClient(
+			contract,
+			{
+				users: {
+					get: ({ headers }) => {
+						seen.push(headers.get("authorization"));
+						return { id: 1, name: "a" };
+					},
+				},
+			},
+			{ baseUrl: "https://api.test/v2", auth: bearer("t"), errors: { 401: z.object({ reason: z.string() }) } },
+		);
 		expect(await api.users.get({ params: { id: 1 } })).toEqual({ id: 1, name: "a" });
 		expect(seen).toEqual(["Bearer t"]);
 	});
 
 	it("handler exceptions surface as NetworkError with the cause", async () => {
-		const api = mockClient(contract, { users: { get: () => { throw new RangeError("handler bug"); } } });
+		const api = mockClient(contract, {
+			users: {
+				get: () => {
+					throw new RangeError("handler bug");
+				},
+			},
+		});
 		const { error } = await api.users.get({ params: { id: 1 } }).safe();
 		expect(error?.type).toBe("network");
 		expect((error as { cause?: unknown }).cause).toBeInstanceOf(RangeError);
@@ -164,7 +199,11 @@ describe("mockClient", () => {
 
 describe("testing retries (README example)", () => {
 	const payments = defineContract({
-		create: endpoint.post("/payments").body(z.object({ title: z.string() })).returns(User).idempotent(),
+		create: endpoint
+			.post("/payments")
+			.body(z.object({ title: z.string() }))
+			.returns(User)
+			.idempotent(),
 	});
 
 	it("fail(503) simulates a transient failure; the retry carries the same Idempotency-Key", async () => {
@@ -189,7 +228,10 @@ describe("testing retries (README example)", () => {
 			stream: endpoint.get("/todos/stream").as<string>(),
 		});
 		const fetch = mockFetch(routes, {
-			one: ({ params, headers }) => { expectTypeOf(headers).toEqualTypeOf<Headers>(); return `one:${params.id}`; },
+			one: ({ params, headers }) => {
+				expectTypeOf(headers).toEqualTypeOf<Headers>();
+				return `one:${params.id}`;
+			},
 			stream: () => "stream",
 		});
 		const api = createApi(routes, { baseUrl: "http://mock.test", fetch });
@@ -200,7 +242,11 @@ describe("testing retries (README example)", () => {
 
 describe("mockFetch", () => {
 	it("lets you test a fully configured client", async () => {
-		const fetch = mockFetch(contract, { users: { get: ({ headers }) => ({ id: 1, name: headers.get("x-app") ?? "" }) } }, { baseUrl: "https://api.test" });
+		const fetch = mockFetch(
+			contract,
+			{ users: { get: ({ headers }) => ({ id: 1, name: headers.get("x-app") ?? "" }) } },
+			{ baseUrl: "https://api.test" },
+		);
 		const api = createApi(contract, { baseUrl: "https://api.test", fetch, headers: { "x-app": "web" } });
 		expect(await api.users.get({ params: { id: 1 } })).toEqual({ id: 1, name: "web" });
 	});

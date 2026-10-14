@@ -1,4 +1,4 @@
-import type { QueryInput, QueryValue } from "../types";
+import type { QueryInput } from "../types";
 
 export type ArrayFormat =
 	/** `ids=1&ids=2` (default) */
@@ -18,11 +18,15 @@ export type QuerySerializer = (query: Record<string, unknown>) => string;
 
 function primitive(value: unknown): string | undefined {
 	switch (typeof value) {
-		case "string": return value;
-		case "number": return Number.isFinite(value) ? String(value) : undefined;
+		case "string":
+			return value;
+		case "number":
+			return Number.isFinite(value) ? String(value) : undefined;
 		case "boolean":
-		case "bigint": return String(value);
-		default: return value instanceof Date ? value.toISOString() : undefined;
+		case "bigint":
+			return String(value);
+		default:
+			return value instanceof Date ? value.toISOString() : undefined;
 	}
 }
 
@@ -47,9 +51,7 @@ export function createQuerySerializer(options: QuerySerializerOptions = {}): Que
 				return;
 			}
 			value.forEach((item, index) => {
-				const itemKey = arrayFormat === "brackets" ? `${key}[]`
-					: arrayFormat === "indices" ? `${key}[${index}]`
-						: key;
+				const itemKey = arrayFormat === "brackets" ? `${key}[]` : arrayFormat === "indices" ? `${key}[${index}]` : key;
 				write(parts, itemKey, item);
 			});
 			return;
@@ -68,7 +70,7 @@ export function createQuerySerializer(options: QuerySerializerOptions = {}): Que
 		}
 	};
 
-	return query => {
+	return (query) => {
 		const parts: string[] = [];
 		for (const key in query) {
 			write(parts, key, query[key]);
@@ -80,11 +82,14 @@ export function createQuerySerializer(options: QuerySerializerOptions = {}): Que
 export const defaultQuerySerializer: QuerySerializer = createQuerySerializer();
 
 /** Normalize any query input into a query string (without the leading `?`) */
-export function serializeQuery(query: QueryInput | Record<string, unknown> | undefined, serializer: QuerySerializer): string {
+export function serializeQuery(
+	query: QueryInput | Record<string, unknown> | undefined,
+	serializer: QuerySerializer,
+): string {
 	if (query === undefined || query === null) return "";
 	if (typeof query === "string") return query.startsWith("?") ? query.slice(1) : query;
 	if (query instanceof URLSearchParams) return query.toString();
-	return serializer(query as Record<string, QueryValue>);
+	return serializer(query);
 }
 
 /** Append a query string to a URL that may already contain one */

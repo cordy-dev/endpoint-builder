@@ -1,117 +1,112 @@
 {
-    "name": "@cordy/endpoint-builder",
-    "version": "2.0.0",
-    "description": "Type-safe, schema-validated HTTP client with fluent immutable builders, typed endpoint contracts, retries, auth refresh and middleware",
-    "type": "module",
-    "license": "MIT",
-    "homepage": "https://github.com/cordy-dev/endpoint-builder#readme",
-    "bugs": {
-        "url": "https://github.com/cordy-dev/endpoint-builder/issues"
+  "name": "@cordy/endpoint-builder",
+  "version": "2.0.0",
+  "description": "Type-safe, schema-validated HTTP client with fluent immutable builders, typed endpoint contracts, retries, auth refresh and middleware",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/cordy-dev/endpoint-builder#readme",
+  "bugs": {
+    "url": "https://github.com/cordy-dev/endpoint-builder/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cordy-dev/endpoint-builder.git"
+  },
+  "author": "Anton Ryuben <developer@myraxbyte.dev>",
+  "files": [
+    "dist",
+    "llms.txt",
+    "llms-full.txt"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/cordy-dev/endpoint-builder.git"
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js",
+      "default": "./dist/auth.js"
     },
-    "author": "Anton Ryuben <developer@myraxbyte.dev>",
-    "files": [
-        "dist",
-        "llms.txt",
-        "llms-full.txt"
-    ],
-    "main": "./dist/index.js",
-    "module": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js",
-            "default": "./dist/index.js"
-        },
-        "./auth": {
-            "types": "./dist/auth.d.ts",
-            "import": "./dist/auth.js",
-            "default": "./dist/auth.js"
-        },
-        "./retry": {
-            "types": "./dist/retry.d.ts",
-            "import": "./dist/retry.js",
-            "default": "./dist/retry.js"
-        },
-        "./errors": {
-            "types": "./dist/errors.d.ts",
-            "import": "./dist/errors.js",
-            "default": "./dist/errors.js"
-        },
-        "./testing": {
-            "types": "./dist/testing.d.ts",
-            "import": "./dist/testing.js",
-            "default": "./dist/testing.js"
-        },
-        "./package.json": "./package.json"
+    "./retry": {
+      "types": "./dist/retry.d.ts",
+      "import": "./dist/retry.js",
+      "default": "./dist/retry.js"
     },
-    "sideEffects": false,
-    "publishConfig": {
-        "access": "public"
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js",
+      "default": "./dist/errors.js"
     },
-    "scripts": {
-        "lint:check": "npm run lint",
-        "build": "tsdown",
-        "dev": "tsdown --watch",
-        "test": "vitest run --reporter=verbose",
-        "typecheck": "tsc --noEmit",
-        "docs:llms": "tsx scripts/build-llms.ts",
-        "release": "bumpp && npm publish",
-        "prepublishOnly": "npm run build",
-        "lint": "eslint",
-        "lint:fix": "eslint --fix",
-        "lint-staged": "lint-staged",
-        "test:types": "tsc --noEmit"
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "default": "./dist/testing.js"
     },
-    "devDependencies": {
-        "@eslint/css": "^0.14.1",
-        "@eslint/eslintrc": "^3.3.3",
-        "@eslint/js": "^9.39.1",
-        "@eslint/json": "^0.14.0",
-        "@types/node": "^24.10.1",
-        "@vitest/coverage-v8": "^4.0.15",
-        "arktype": "^2.2.8",
-        "bumpp": "^10.3.2",
-        "eslint": "^9.39.1",
-        "eslint-plugin-simple-import-sort": "^12.1.1",
-        "eslint-plugin-unused-imports": "^4.3.0",
-        "globals": "^16.5.0",
-        "lint-staged": "^16.2.7",
-        "simple-git-hooks": "^2.13.1",
-        "tsdown": "^0.16.8",
-        "tsx": "^4.21.0",
-        "typescript": "^5.8.3",
-        "typescript-eslint": "^8.48.1",
-        "valibot": "^1.5.0",
-        "vitest": "^4.0.15",
-        "zod": "^4.6.7"
-    },
-    "simple-git-hooks": {
-        "pre-commit": "npm run lint-staged"
-    },
-    "lint-staged": {
-        "*": "npm run lint:fix"
-    },
-    "engines": {
-        "node": ">=20.3.0"
-    },
-    "keywords": [
-        "typescript",
-        "http",
-        "fetch",
-        "client",
-        "rest",
-        "api",
-        "builder",
-        "standard-schema",
-        "zod",
-        "valibot",
-        "arktype",
-        "type-safe",
-        "retry"
-    ]
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run --reporter=verbose",
+    "check": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "docs:llms": "bun scripts/build-llms.ts",
+    "release": "bumpp && npm publish",
+    "prepublishOnly": "bun run build",
+    "lint-staged": "lint-staged"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "^4.0.15",
+    "arktype": "^2.2.8",
+    "bumpp": "^10.3.2",
+    "lint-staged": "^16.2.7",
+    "oxfmt": "^0.73.0",
+    "oxlint": "^1.88.0",
+    "oxlint-tsgolint": "^7.0.2004",
+    "simple-git-hooks": "^2.13.1",
+    "tsdown": "^0.16.8",
+    "typescript": "^5.8.3",
+    "valibot": "^1.5.0",
+    "vitest": "^4.0.15",
+    "zod": "^4.6.7"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "bun run lint-staged"
+  },
+  "lint-staged": {
+    "*.{ts,mts,json,yml}": "oxfmt --no-error-on-unmatched-pattern",
+    "*.{ts,mts}": "oxlint --fix"
+  },
+  "engines": {
+    "node": ">=20.3.0"
+  },
+  "keywords": [
+    "typescript",
+    "http",
+    "fetch",
+    "client",
+    "rest",
+    "api",
+    "builder",
+    "standard-schema",
+    "zod",
+    "valibot",
+    "arktype",
+    "type-safe",
+    "retry"
+  ],
+  "packageManager": "bun@1.4.2"
 }

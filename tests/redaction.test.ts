@@ -21,17 +21,43 @@ function expectClean(error: EndpointError | undefined, masked = false) {
 
 describe("credentials in URLs never reach errors", () => {
 	it("is masked in every error type, while the real URL is still sent", async () => {
-		const network = mockFetch(() => { throw new TypeError("fetch failed"); });
-		expectClean((await createClient({ baseUrl: base, fetch: network, ...keyed }).get("/x").safe()).error, true);
+		const network = mockFetch(() => {
+			throw new TypeError("fetch failed");
+		});
+		expectClean(
+			(
+				await createClient({ baseUrl: base, fetch: network, ...keyed })
+					.get("/x")
+					.safe()
+			).error,
+			true,
+		);
 		expect(network.calls[0]!.url).toBe(`${base}/x?api_key=${secret}`);
 
-		expectClean((await createClient({ baseUrl: base, fetch: hangingFetch(), timeout: 20, ...keyed }).get("/x").safe()).error, true);
-		expectClean((await createClient({ baseUrl: base, fetch: mockFetch(json({}, { status: 500 })), ...keyed }).get("/x").safe()).error);
+		expectClean(
+			(
+				await createClient({ baseUrl: base, fetch: hangingFetch(), timeout: 20, ...keyed })
+					.get("/x")
+					.safe()
+			).error,
+			true,
+		);
+		expectClean(
+			(
+				await createClient({ baseUrl: base, fetch: mockFetch(json({}, { status: 500 })), ...keyed })
+					.get("/x")
+					.safe()
+			).error,
+		);
 
-		const aborted = await createClient({ baseUrl: base, fetch: hangingFetch(), ...keyed }).get("/x").signal(AbortSignal.abort()).safe();
+		const aborted = await createClient({ baseUrl: base, fetch: hangingFetch(), ...keyed })
+			.get("/x")
+			.signal(AbortSignal.abort())
+			.safe();
 		expect(aborted.error?.message).not.toContain(secret);
 
-		const invalid = await createClient({ baseUrl: base, fetch: mockFetch(json({})), ...keyed }).post("/x", { json: {} })
+		const invalid = await createClient({ baseUrl: base, fetch: mockFetch(json({})), ...keyed })
+			.post("/x", { json: {} })
 			.json({}, { "~standard": { version: 1, vendor: "t", validate: () => ({ issues: [{ message: "nope" }] }) } })
 			.safe();
 		expectClean(invalid.error);
@@ -45,7 +71,14 @@ describe("credentials in URLs never reach errors", () => {
 
 	it("hooks and middleware still see the real URL", async () => {
 		const seen: string[] = [];
-		const api = createClient({ baseUrl: base, fetch: mockFetch(json({})), onResponse: (_response, ctx) => { seen.push(ctx.url); }, ...keyed });
+		const api = createClient({
+			baseUrl: base,
+			fetch: mockFetch(json({})),
+			onResponse: (_response, ctx) => {
+				seen.push(ctx.url);
+			},
+			...keyed,
+		});
 		await api.get("/x");
 		expect(seen).toEqual([`${base}/x`]); // credentials are applied below the hooks layer
 	});
@@ -54,8 +87,13 @@ describe("credentials in URLs never reach errors", () => {
 describe("redactUrl", () => {
 	it("masks values by parameter name", () => {
 		expect(redactUrl("https://a.test/x")).toBe("https://a.test/x");
-		expect(redactUrl("https://a.test/x?api_key=1&apiKey=2&access_token=3&client-secret=4&password=5&Signature=6&page=1&sort=asc&monkey=7"))
-			.toBe("https://a.test/x?api_key=***&apiKey=***&access_token=***&client-secret=***&password=***&Signature=***&page=1&sort=asc&monkey=***");
+		expect(
+			redactUrl(
+				"https://a.test/x?api_key=1&apiKey=2&access_token=3&client-secret=4&password=5&Signature=6&page=1&sort=asc&monkey=7",
+			),
+		).toBe(
+			"https://a.test/x?api_key=***&apiKey=***&access_token=***&client-secret=***&password=***&Signature=***&page=1&sort=asc&monkey=***",
+		);
 		expect(redactUrl("/x?auth=1&author=jane&flag")).toBe("/x?auth=***&author=jane&flag");
 	});
 

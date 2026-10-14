@@ -1,199 +1,211 @@
 name: Release & Publish
 
 on:
-    release:
-        types: [published]
+  release:
+    types: [published]
 
 permissions:
-    contents: read
-    id-token: write # for provenance
-    attestations: write # for provenance
+  contents: read
+  id-token: write # for provenance
+  attestations: write # for provenance
 
 jobs:
-    validate-release:
-        name: Validate Release
-        runs-on: ubuntu-latest
-        timeout-minutes: 15
-        outputs:
-            is-prerelease: ${{ steps.check-prerelease.outputs.prerelease }}
-            version: ${{ steps.get-version.outputs.version }}
+  validate-release:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      is-prerelease: ${{ steps.check-prerelease.outputs.prerelease }}
+      version: ${{ steps.get-version.outputs.version }}
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0 # Full history for provenance
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for provenance
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: npm
-                  registry-url: https://registry.npmjs.org
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
 
-            - name: Install dependencies
-              run: npm ci --prefer-offline
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.x
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-            - name: Lint code
-              run: npm run lint
+      - name: Lint code
+        run: bun run lint
 
-            - name: Type check
-              run: npm run typecheck
+      - name: Check formatting
+        run: bun run format:check
 
-            - name: Security audit
-              run: npm audit --audit-level=moderate
+      - name: Type check
+        run: bun run check
 
-            - name: Build project
-              run: npm run build
+      - name: Security audit
+        run: bun audit --audit-level=moderate
 
-            - name: Run tests
-              run: npm test
+      - name: Build project
+        run: bun run build
 
-            - name: Verify package contents
-              run: |
-                  npm pack --dry-run
-                  echo "📋 Package will include:" >> $GITHUB_STEP_SUMMARY
-                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                  npm pack --dry-run 2>&1 | grep -A 100 "npm notice" >> $GITHUB_STEP_SUMMARY
-                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+      - name: Run tests
+        run: bun run test
 
-            - name: Get version
-              id: get-version
-              run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: Verify package contents
+        run: |
+          npm pack --dry-run
+          echo "📋 Package will include:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          npm pack --dry-run 2>&1 | grep -A 100 "npm notice" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
-            - name: Check if prerelease
-              id: check-prerelease
-              run: |
-                  if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
-                    echo "prerelease=true" >> $GITHUB_OUTPUT
-                  else
-                    echo "prerelease=false" >> $GITHUB_OUTPUT
-                  fi
+      - name: Get version
+        id: get-version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-            - name: Verify version matches release tag
-              run: |
-                  PACKAGE_VERSION="v${{ steps.get-version.outputs.version }}"
-                  RELEASE_TAG="${{ github.event.release.tag_name }}"
-                  if [[ "$PACKAGE_VERSION" != "$RELEASE_TAG" ]]; then
-                    echo "❌ Version mismatch: package.json ($PACKAGE_VERSION) != release tag ($RELEASE_TAG)"
-                    exit 1
-                  fi
-                  echo "✅ Version matches: $PACKAGE_VERSION"
+      - name: Check if prerelease
+        id: check-prerelease
+        run: |
+          if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
 
-    publish-npm:
-        name: Publish to NPM
-        runs-on: ubuntu-latest
-        timeout-minutes: 10
-        needs: validate-release
-        environment: npm
+      - name: Verify version matches release tag
+        run: |
+          PACKAGE_VERSION="v${{ steps.get-version.outputs.version }}"
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          if [[ "$PACKAGE_VERSION" != "$RELEASE_TAG" ]]; then
+            echo "❌ Version mismatch: package.json ($PACKAGE_VERSION) != release tag ($RELEASE_TAG)"
+            exit 1
+          fi
+          echo "✅ Version matches: $PACKAGE_VERSION"
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
+  publish-npm:
+    name: Publish to NPM
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate-release
+    environment: npm
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: npm
-                  registry-url: https://registry.npmjs.org
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-            - name: Install dependencies
-              run: npm ci --prefer-offline
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
 
-            - name: Build project
-              run: npm run build
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.x
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-            - name: Publish to NPM (latest)
-              if: needs.validate-release.outputs.is-prerelease == 'false'
-              run: |
-                  # Try with provenance first
-                  if ! npm publish --provenance; then
-                    echo "⚠️ Provenance publication failed, trying without provenance..."
-                    npm publish
-                  fi
-                  echo "✅ Published @cordy/endpoint-builder@${{ needs.validate-release.outputs.version }} to NPM"
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Build project
+        run: bun run build
 
-            - name: Publish to NPM (beta)
-              if: needs.validate-release.outputs.is-prerelease == 'true'
-              run: |
-                  # Try with provenance first
-                  if ! npm publish --tag beta --provenance; then
-                    echo "⚠️ Provenance publication failed, trying without provenance..."
-                    npm publish --tag beta
-                  fi
-                  echo "✅ Published @cordy/endpoint-builder@${{ needs.validate-release.outputs.version }} (beta) to NPM"
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to NPM (latest)
+        if: needs.validate-release.outputs.is-prerelease == 'false'
+        run: |
+          # Try with provenance first
+          if ! npm publish --provenance; then
+            echo "⚠️ Provenance publication failed, trying without provenance..."
+            npm publish
+          fi
+          echo "✅ Published @cordy/endpoint-builder@${{ needs.validate-release.outputs.version }} to NPM"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-    create-github-release-assets:
-        name: Create Release Assets
-        runs-on: ubuntu-latest
-        timeout-minutes: 10
-        needs: [validate-release, publish-npm]
-        if: always() && needs.validate-release.result == 'success'
-        permissions:
-            contents: write
-            actions: read
+      - name: Publish to NPM (beta)
+        if: needs.validate-release.outputs.is-prerelease == 'true'
+        run: |
+          # Try with provenance first
+          if ! npm publish --tag beta --provenance; then
+            echo "⚠️ Provenance publication failed, trying without provenance..."
+            npm publish --tag beta
+          fi
+          echo "✅ Published @cordy/endpoint-builder@${{ needs.validate-release.outputs.version }} (beta) to NPM"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
+  create-github-release-assets:
+    name: Create Release Assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [validate-release, publish-npm]
+    if: always() && needs.validate-release.result == 'success'
+    permissions:
+      contents: write
+      actions: read
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: npm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            - name: Install dependencies
-              run: npm ci --prefer-offline
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-            - name: Build project
-              run: npm run build
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.x
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-            - name: Create tarball
-              run: npm pack
+      - name: Build project
+        run: bun run build
 
-            - name: Upload release assets
-              uses: actions/github-script@v7
-              with:
-                  script: |
-                      const fs = require('fs');
-                      const path = require('path');
+      - name: Create tarball
+        run: npm pack
 
-                      const files = fs.readdirSync('.')
-                        .filter(file => file.endsWith('.tgz'));
+      - name: Upload release assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
 
-                      for (const file of files) {
-                        console.log(`Uploading ${file}...`);
-                        await github.rest.repos.uploadReleaseAsset({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          release_id: ${{ github.event.release.id }},
-                          name: file,
-                          data: fs.readFileSync(file)
-                        });
-                        console.log(`✅ Uploaded ${file}`);
-                      }
+            const files = fs.readdirSync('.')
+              .filter(file => file.endsWith('.tgz'));
 
-    post-release:
-        name: Post Release Actions
-        runs-on: ubuntu-latest
-        timeout-minutes: 5
-        needs: [publish-npm]
-        if: always() && needs.publish-npm.result == 'success'
+            for (const file of files) {
+              console.log(`Uploading ${file}...`);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: ${{ github.event.release.id }},
+                name: file,
+                data: fs.readFileSync(file)
+              });
+              console.log(`✅ Uploaded ${file}`);
+            }
 
-        steps:
-            - name: Create release summary
-              run: |
-                  echo "🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
-                  echo "- **Package:** @cordy/endpoint-builder" >> $GITHUB_STEP_SUMMARY
-                  echo "- **Version:** ${{ needs.validate-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-                  echo "- **Type:** ${{ needs.validate-release.outputs.is-prerelease == 'true' && 'Pre-release (beta)' || 'Stable release' }}" >> $GITHUB_STEP_SUMMARY
-                  echo "- **NPM:** https://www.npmjs.com/package/@cordy/endpoint-builder" >> $GITHUB_STEP_SUMMARY
-                  echo "- **GitHub:** ${{ github.event.release.html_url }}" >> $GITHUB_STEP_SUMMARY
+  post-release:
+    name: Post Release Actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [publish-npm]
+    if: always() && needs.publish-npm.result == 'success'
+
+    steps:
+      - name: Create release summary
+        run: |
+          echo "🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** @cordy/endpoint-builder" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.validate-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Type:** ${{ needs.validate-release.outputs.is-prerelease == 'true' && 'Pre-release (beta)' || 'Stable release' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **NPM:** https://www.npmjs.com/package/@cordy/endpoint-builder" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub:** ${{ github.event.release.html_url }}" >> $GITHUB_STEP_SUMMARY

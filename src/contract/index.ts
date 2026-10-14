@@ -1,5 +1,13 @@
 import type { AuthStrategy } from "../auth/types";
-import { type ClientCore, type ErrorSchemas, type IdempotentOptions, type InferErrors, type MergeErrors, RequestBuilder, type RequestState } from "../core/request";
+import {
+	type ClientCore,
+	type ErrorSchemas,
+	type IdempotentOptions,
+	type InferErrors,
+	type MergeErrors,
+	RequestBuilder,
+	type RequestState,
+} from "../core/request";
 import type { ErrorMap } from "../errors";
 import type { RetryInput } from "../retry";
 import type { InferInput, InferOutput, Schema } from "../schema";
@@ -103,7 +111,10 @@ export class Endpoint<S extends EndpointSpec = EndpointSpec> {
 	}
 
 	/** Validate the request body (sent as JSON unless it is a native body) */
-	body<Sc extends Schema>(schema: Sc, kind: "auto" | "json" | "form" | "multipart" = "auto"): Endpoint<Patch<S, { body: Sc }>> {
+	body<Sc extends Schema>(
+		schema: Sc,
+		kind: "auto" | "json" | "form" | "multipart" = "auto",
+	): Endpoint<Patch<S, { body: Sc }>> {
 		return this.#with({ bodySchema: schema, bodyKind: kind });
 	}
 
@@ -133,7 +144,10 @@ export class Endpoint<S extends EndpointSpec = EndpointSpec> {
 	}
 
 	/** Newline-delimited JSON. Calls resolve with an `EventStream` of validated lines. */
-	ndjson<Sc extends Schema>(schema: Sc, options?: NdjsonOptions): Endpoint<Patch<S, { data: EventStream<InferOutput<Sc>> }>> {
+	ndjson<Sc extends Schema>(
+		schema: Sc,
+		options?: NdjsonOptions,
+	): Endpoint<Patch<S, { data: EventStream<InferOutput<Sc>> }>> {
 		return this.#with({ stream: { kind: "ndjson", schema, options }, responseType: "stream" });
 	}
 
@@ -196,24 +210,31 @@ export const endpoint = {
 
 // ------------------------------------------------------------------- typing
 
-type Field<K extends string, T> =
-	undefined extends T ? { [P in K]?: T }
-		: {} extends T ? { [P in K]?: T }
-			: { [P in K]: T };
+type Field<K extends string, T> = undefined extends T
+	? { [P in K]?: T }
+	: {} extends T
+		? { [P in K]?: T }
+		: { [P in K]: T };
 
 type ParamsPart<P extends string, TParams> = [TParams] extends [Unset]
-	? HasRequiredParams<P> extends true ? { params: PathParams<P> }
-		: HasParams<P> extends true ? { params?: PathParams<P> }
+	? HasRequiredParams<P> extends true
+		? { params: PathParams<P> }
+		: HasParams<P> extends true
+			? { params?: PathParams<P> }
 			: { params?: undefined }
 	: Field<"params", InferInput<TParams>>;
 
 type QueryPart<TQuery> = [TQuery] extends [Unset] ? { query?: QueryInput } : Field<"query", InferInput<TQuery>>;
 
 type BodyPart<M extends HttpMethod, TBody> = [TBody] extends [Unset]
-	? M extends BodylessMethod ? {} : { body?: unknown }
+	? M extends BodylessMethod
+		? {}
+		: { body?: unknown }
 	: Field<"body", InferInput<TBody>>;
 
-type HeadersPart<THeaders> = [THeaders] extends [Unset] ? { headers?: HeadersInput } : Field<"headers", InferInput<THeaders>>;
+type HeadersPart<THeaders> = [THeaders] extends [Unset]
+	? { headers?: HeadersInput }
+	: Field<"headers", InferInput<THeaders>>;
 
 interface CommonInput {
 	signal?: AbortSignal;
@@ -221,9 +242,16 @@ interface CommonInput {
 }
 
 /** Input object accepted by a bound endpoint */
-export type EndpointInput<E> = E extends Endpoint<infer S>
-	? Simplify<ParamsPart<S["path"], S["params"]> & QueryPart<S["query"]> & HeadersPart<S["headers"]> & BodyPart<S["method"], S["body"]> & CommonInput>
-	: never;
+export type EndpointInput<E> =
+	E extends Endpoint<infer S>
+		? Simplify<
+				ParamsPart<S["path"], S["params"]> &
+					QueryPart<S["query"]> &
+					HeadersPart<S["headers"]> &
+					BodyPart<S["method"], S["body"]> &
+					CommonInput
+			>
+		: never;
 
 /** Response data of an endpoint */
 export type EndpointData<E> = E extends Endpoint<infer S> ? S["data"] : never;
@@ -232,9 +260,10 @@ export type EndpointData<E> = E extends Endpoint<infer S> ? S["data"] : never;
 export type EndpointErrors<E> = E extends Endpoint<infer S> ? S["errors"] : never;
 
 /** Callable produced by binding an endpoint to a client */
-export type EndpointFn<E, TClientErrors extends ErrorMap> = {} extends EndpointInput<E>
-	? (input?: EndpointInput<E>) => RequestBuilder<EndpointData<E>, MergeErrors<TClientErrors, EndpointErrors<E>>>
-	: (input: EndpointInput<E>) => RequestBuilder<EndpointData<E>, MergeErrors<TClientErrors, EndpointErrors<E>>>;
+export type EndpointFn<E, TClientErrors extends ErrorMap> =
+	{} extends EndpointInput<E>
+		? (input?: EndpointInput<E>) => RequestBuilder<EndpointData<E>, MergeErrors<TClientErrors, EndpointErrors<E>>>
+		: (input: EndpointInput<E>) => RequestBuilder<EndpointData<E>, MergeErrors<TClientErrors, EndpointErrors<E>>>;
 
 /** Nested object of endpoints */
 export interface Contract {
@@ -265,10 +294,17 @@ interface RuntimeInput {
 }
 
 /** @internal create a request builder for an endpoint call */
-export function createEndpointRequest(core: ClientCore, def: EndpointDefinition, input: RuntimeInput = {}): RequestBuilder<any, any> {
+export function createEndpointRequest(
+	core: ClientCore,
+	def: EndpointDefinition,
+	input: RuntimeInput = {},
+): RequestBuilder<any, any> {
 	// with a headers schema the caller's headers are validated, otherwise they are plain extra headers
 	const typedHeaders = def.headersSchema !== undefined;
-	const headers = input.headers && !typedHeaders ? [...(def.defaultHeaders ?? []), input.headers as HeadersInput] : def.defaultHeaders;
+	const headers =
+		input.headers && !typedHeaders
+			? [...(def.defaultHeaders ?? []), input.headers as HeadersInput]
+			: def.defaultHeaders;
 	const state: RequestState = {
 		method: def.method,
 		path: def.path,
@@ -304,9 +340,10 @@ export function bindContract<C extends Contract>(core: ClientCore, contract: C):
 	const bound: Record<string, unknown> = {};
 	for (const key of Object.keys(contract)) {
 		const value = contract[key]!;
-		bound[key] = value instanceof Endpoint
-			? (input?: RuntimeInput) => createEndpointRequest(core, value.definition, input)
-			: bindContract(core, value);
+		bound[key] =
+			value instanceof Endpoint
+				? (input?: RuntimeInput) => createEndpointRequest(core, value.definition, input)
+				: bindContract(core, value);
 	}
 	return bound as BoundContract<C>;
 }

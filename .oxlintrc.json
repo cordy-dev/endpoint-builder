@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "vitest"],
+  "categories": { "correctness": "error" },
+  "options": { "typeAware": true, "reportUnusedDisableDirectives": "error" },
+  "rules": {
+    "typescript/no-floating-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/require-await": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/prefer-promise-reject-errors": "error",
+    "typescript/unbound-method": "error",
+    "typescript/no-base-to-string": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/no-array-delete": "error",
+    "typescript/no-implied-eval": "error",
+    "typescript/no-for-in-array": "error",
+    "typescript/require-array-sort-compare": "error",
+    "no-unused-vars": ["error", { "varsIgnorePattern": "^_", "argsIgnorePattern": "^_", "args": "after-used" }],
+    "typescript/no-explicit-any": "off",
+    "typescript/no-empty-object-type": "off",
+    "typescript/no-misused-promises": "off"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**"],
+      "rules": {
+        // stubs are often async without awaiting, and tests compare lots of loosely typed values
+        "typescript/require-await": "off",
+        "typescript/no-base-to-string": "off",
+        "typescript/prefer-promise-reject-errors": "off",
+        // expect(value, "message") is valid in vitest
+        "vitest/valid-expect": "off",
+        "vitest/require-mock-type-parameters": "off",
+        "vitest/no-conditional-expect": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["dist/**", "coverage/**", "tests/fixtures/**", "llms-full.txt"]
+}

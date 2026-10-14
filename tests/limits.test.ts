@@ -1,10 +1,19 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { AbortError, type ApiError, createApi,createClient, defineContract, endpoint, HttpError, SizeLimitError } from "../src";
+import {
+	AbortError,
+	type ApiError,
+	createApi,
+	createClient,
+	defineContract,
+	endpoint,
+	HttpError,
+	SizeLimitError,
+} from "../src";
 import { chunked, json, mockFetch, sseResponse } from "./helpers";
 
 const base = "https://api.test";
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("idempotent()", () => {
 	it("sends one key for all attempts and retries a POST", async () => {
@@ -12,7 +21,7 @@ describe("idempotent()", () => {
 		const api = createClient({ baseUrl: base, fetch, retry: { delay: 0 } });
 		expect(await api.post("/payments", { json: { amount: 1 } }).idempotent()).toEqual({ ok: true });
 		expect(fetch).toHaveBeenCalledTimes(3);
-		const keys = fetch.calls.map(call => call.headers.get("idempotency-key"));
+		const keys = fetch.calls.map((call) => call.headers.get("idempotency-key"));
 		expect(keys[0]).toMatch(/^[0-9a-f-]{16,}$/);
 		expect(new Set(keys).size).toBe(1);
 	});
@@ -59,7 +68,7 @@ describe("idempotent()", () => {
 		const api = createApi(contract, { baseUrl: base, fetch, retry: { delay: 0 } });
 		await api.pay();
 		await api.pay();
-		const [first, retried, second] = fetch.calls.map(call => call.headers.get("idempotency-key"));
+		const [first, retried, second] = fetch.calls.map((call) => call.headers.get("idempotency-key"));
 		expect(first).toBe(retried);
 		expect(second).not.toBe(first);
 	});
@@ -92,16 +101,19 @@ describe("concurrency & rateLimit", () => {
 		const api = createClient({ baseUrl: base, fetch, concurrency: 2 });
 		await Promise.all(Array.from({ length: 6 }, (_, i) => api.get(`/${i}`)));
 		expect(fetch.peak()).toBe(2);
-		expect(fetch.calls.map(c => c.url.slice(-1))).toEqual(["0", "1", "2", "3", "4", "5"]);
+		expect(fetch.calls.map((c) => c.url.slice(-1))).toEqual(["0", "1", "2", "3", "4", "5"]);
 	});
 
 	it("limits the start rate with a sliding window", async () => {
 		const starts: number[] = [];
-		const fetch = mockFetch(() => { starts.push(Date.now()); return json({}); });
+		const fetch = mockFetch(() => {
+			starts.push(Date.now());
+			return json({});
+		});
 		const api = createClient({ baseUrl: base, fetch, rateLimit: { requests: 2, per: 100 } });
 		const began = Date.now();
 		await Promise.all(Array.from({ length: 5 }, (_, i) => api.get(`/${i}`)));
-		const offsets = starts.map(t => t - began);
+		const offsets = starts.map((t) => t - began);
 		expect(offsets[1]!).toBeLessThan(50); // two fit into the first window
 		expect(offsets[2]!).toBeGreaterThanOrEqual(90); // the third waits for the window to slide
 		expect(offsets[4]!).toBeGreaterThanOrEqual(190);
@@ -109,7 +121,10 @@ describe("concurrency & rateLimit", () => {
 
 	it("counts retries too, so a retry storm cannot exceed the limit", async () => {
 		const starts: number[] = [];
-		const fetch = mockFetch(() => { starts.push(Date.now()); return starts.length === 1 ? json({}, { status: 503 }) : json({ ok: true }); });
+		const fetch = mockFetch(() => {
+			starts.push(Date.now());
+			return starts.length === 1 ? json({}, { status: 503 }) : json({ ok: true });
+		});
 		const api = createClient({ baseUrl: base, fetch, retry: { delay: 0 }, rateLimit: { requests: 1, per: 80 } });
 		await api.get("/x");
 		expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(70);
@@ -128,7 +143,9 @@ describe("concurrency & rateLimit", () => {
 	});
 
 	it("frees the slot when a request fails", async () => {
-		const fetch = mockFetch(() => { throw new TypeError("down"); });
+		const fetch = mockFetch(() => {
+			throw new TypeError("down");
+		});
 		const api = createClient({ baseUrl: base, fetch, retry: false, concurrency: 1 });
 		for (let i = 0; i < 3; i++) await api.get("/x").safe();
 		expect(fetch).toHaveBeenCalledTimes(3);
@@ -157,7 +174,10 @@ describe("maxResponseBytes", () => {
 	it("rejects a body announced as too large without reading it", async () => {
 		const cancel = vi.fn();
 		const body = new ReadableStream<Uint8Array>({ cancel });
-		const fetch = () => Promise.resolve(new Response(body, { headers: { "content-type": "application/json", "content-length": "5000" } }));
+		const fetch = () =>
+			Promise.resolve(
+				new Response(body, { headers: { "content-type": "application/json", "content-length": "5000" } }),
+			);
 		const api = createClient({ baseUrl: base, fetch, maxResponseBytes: 1000 });
 		const { error } = await api.get("/big").safe();
 		expect(error).toBeInstanceOf(SizeLimitError);
@@ -170,7 +190,10 @@ describe("maxResponseBytes", () => {
 		let sent = 0;
 		const cancel = vi.fn();
 		const body = new ReadableStream<Uint8Array>({
-			pull(controller) { sent += 100; controller.enqueue(new Uint8Array(100).fill(65)); },
+			pull(controller) {
+				sent += 100;
+				controller.enqueue(new Uint8Array(100).fill(65));
+			},
 			cancel,
 		});
 		const fetch = () => Promise.resolve(new Response(body, { headers: { "content-type": "text/plain" } }));
@@ -200,11 +223,15 @@ describe("maxResponseBytes", () => {
 		expect((await api.get("/x").safe()).error).toBeInstanceOf(SizeLimitError);
 		expect(await api.get("/x").maxResponseBytes(false)).toHaveLength(500);
 		expect(await createClient({ baseUrl: base, fetch }).get("/x").maxResponseBytes(1000)).toHaveLength(500);
-		expect((await createClient({ baseUrl: base, fetch }).get("/x").maxResponseBytes(10).safe()).error).toBeInstanceOf(SizeLimitError);
+		expect((await createClient({ baseUrl: base, fetch }).get("/x").maxResponseBytes(10).safe()).error).toBeInstanceOf(
+			SizeLimitError,
+		);
 	});
 
 	it("truncates, but does not reject, huge error bodies", async () => {
-		const fetch = mockFetch(() => new Response("e".repeat(5000), { status: 500, headers: { "content-type": "text/plain" } }));
+		const fetch = mockFetch(
+			() => new Response("e".repeat(5000), { status: 500, headers: { "content-type": "text/plain" } }),
+		);
 		const api = createClient({ baseUrl: base, fetch, retry: false, maxResponseBytes: 100 });
 		const { error } = await api.get("/x").safe();
 		expect(error).toBeInstanceOf(HttpError);
@@ -216,7 +243,11 @@ describe("maxResponseBytes", () => {
 		const api = createClient({ baseUrl: base, fetch: mockFetch(() => sseResponse(events)), maxResponseBytes: 50 });
 		expect(await (await api.get("/x").sse()).toArray()).toHaveLength(50);
 
-		const empty = createClient({ baseUrl: base, fetch: mockFetch(new Response(null, { status: 204 })), maxResponseBytes: 1 });
+		const empty = createClient({
+			baseUrl: base,
+			fetch: mockFetch(new Response(null, { status: 204 })),
+			maxResponseBytes: 1,
+		});
 		expect(await empty.delete("/x")).toBeUndefined();
 	});
 

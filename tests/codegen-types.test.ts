@@ -6,11 +6,12 @@ import { validate } from "../src";
 import { NameRegistry, pascalCase } from "../src/codegen/names";
 import { parseSpec } from "../src/codegen/spec";
 import { declareType, schemaToType, type TypeContext } from "../src/codegen/types";
-import { type JsonSchema,jsonSchema } from "../src/openapi/json-schema";
+import { type JsonSchema, jsonSchema } from "../src/openapi/json-schema";
 import { typecheck } from "./helpers-ts";
 
-const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
-const ctx: TypeContext = { refName: name => pascalCase(name) };
+const fixture = (name: string): unknown =>
+	JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
+const ctx: TypeContext = { refName: (name) => pascalCase(name) };
 const type = (schema: JsonSchema | boolean) => schemaToType(schema, ctx);
 
 describe("schemaToType", () => {
@@ -21,10 +22,10 @@ describe("schemaToType", () => {
 		expect(type({ type: "boolean" })).toBe("boolean");
 		expect(type({ type: "null" })).toBe("null");
 		expect(type({ type: ["string", "null"] })).toBe("string | null");
-		expect(type({ type: "string", enum: ["a", "b"] })).toBe("\"a\" | \"b\"");
-		expect(type({ type: ["string", "null"], enum: ["a", null] })).toBe("\"a\" | null");
+		expect(type({ type: "string", enum: ["a", "b"] })).toBe('"a" | "b"');
+		expect(type({ type: ["string", "null"], enum: ["a", null] })).toBe('"a" | null');
 		expect(type({ enum: [1, 2, true] })).toBe("1 | 2 | true");
-		expect(type({ const: "created" })).toBe("\"created\"");
+		expect(type({ const: "created" })).toBe('"created"');
 		expect(type({})).toBe("unknown");
 		expect(type(true)).toBe("unknown");
 		expect(type(false)).toBe("never");
@@ -35,19 +36,28 @@ describe("schemaToType", () => {
 	it("arrays and tuples", () => {
 		expect(type({ type: "array", items: { type: "string" } })).toBe("string[]");
 		expect(type({ type: "array", items: { type: ["string", "null"] } })).toBe("(string | null)[]");
-		expect(type({ type: "array", items: { oneOf: [{ $ref: "#/$defs/Dog" }, { $ref: "#/$defs/Cat" }] } })).toBe("(Dog | Cat)[]");
+		expect(type({ type: "array", items: { oneOf: [{ $ref: "#/$defs/Dog" }, { $ref: "#/$defs/Cat" }] } })).toBe(
+			"(Dog | Cat)[]",
+		);
 		expect(type({ type: "array" })).toBe("unknown[]");
-		expect(type({ type: "array", prefixItems: [{ type: "number" }, { type: "string" }], items: false })).toBe("[number, string]");
-		expect(type({ type: "array", prefixItems: [{ type: "number" }], items: { type: "string" } })).toBe("[number, ...string[]]");
+		expect(type({ type: "array", prefixItems: [{ type: "number" }, { type: "string" }], items: false })).toBe(
+			"[number, string]",
+		);
+		expect(type({ type: "array", prefixItems: [{ type: "number" }], items: { type: "string" } })).toBe(
+			"[number, ...string[]]",
+		);
 	});
 
 	it("objects: required, optional, quoted keys, nesting", () => {
-		expect(type({ type: "object", required: ["id"], properties: { id: { type: "integer" }, "x-tag": { type: "string" } } })).toBe(
-			"{\n\tid: number;\n\t\"x-tag\"?: string;\n}",
-		);
-		expect(type({ type: "object", properties: { owner: { type: "object", required: ["name"], properties: { name: { type: "string" } } } } })).toBe(
-			"{\n\towner?: {\n\t\tname: string;\n\t};\n}",
-		);
+		expect(
+			type({ type: "object", required: ["id"], properties: { id: { type: "integer" }, "x-tag": { type: "string" } } }),
+		).toBe('{\n\tid: number;\n\t"x-tag"?: string;\n}');
+		expect(
+			type({
+				type: "object",
+				properties: { owner: { type: "object", required: ["name"], properties: { name: { type: "string" } } } },
+			}),
+		).toBe("{\n\towner?: {\n\t\tname: string;\n\t};\n}");
 		expect(type({ type: "object", required: ["a"], properties: {} })).toBe("{\n\ta: unknown;\n}");
 	});
 
@@ -55,66 +65,89 @@ describe("schemaToType", () => {
 		expect(type({ type: "object" })).toBe("Record<string, unknown>");
 		expect(type({ type: "object", additionalProperties: { type: "string" } })).toBe("Record<string, string>");
 		expect(type({ type: "object", additionalProperties: false })).toBe("Record<string, never>");
-		expect(type({ type: "object", properties: { a: { type: "string" } }, additionalProperties: true })).toBe("{\n\ta?: string;\n}");
-		expect(type({ type: "object", properties: { a: { type: "string" } }, additionalProperties: { type: "number" } })).toBe(
-			"{\n\ta?: string;\n} & { [key: string]: number }",
+		expect(type({ type: "object", properties: { a: { type: "string" } }, additionalProperties: true })).toBe(
+			"{\n\ta?: string;\n}",
 		);
+		expect(
+			type({ type: "object", properties: { a: { type: "string" } }, additionalProperties: { type: "number" } }),
+		).toBe("{\n\ta?: string;\n} & { [key: string]: number }");
 	});
 
 	it("references and combinators", () => {
 		expect(type({ $ref: "#/$defs/pet_status" })).toBe("PetStatus");
-		expect(type({ allOf: [{ $ref: "#/$defs/NewPet" }, { type: "object", required: ["id"], properties: { id: { type: "integer" } } }] })).toBe(
-			"NewPet & {\n\tid: number;\n}",
-		);
+		expect(
+			type({
+				allOf: [
+					{ $ref: "#/$defs/NewPet" },
+					{ type: "object", required: ["id"], properties: { id: { type: "integer" } } },
+				],
+			}),
+		).toBe("NewPet & {\n\tid: number;\n}");
 		expect(type({ oneOf: [{ $ref: "#/$defs/Dog" }, { $ref: "#/$defs/Cat" }] })).toBe("Dog | Cat");
 		expect(type({ anyOf: [{ type: "string" }, { type: "null" }] })).toBe("string | null");
 		expect(type({ type: "object", allOf: [{ $ref: "#/$defs/A" }] })).toBe("A"); // an empty object type adds nothing
-		expect(type({ allOf: [{ $ref: "#/$defs/A" }, { oneOf: [{ $ref: "#/$defs/B" }, { $ref: "#/$defs/C" }] }] })).toBe("A & (B | C)");
+		expect(type({ allOf: [{ $ref: "#/$defs/A" }, { oneOf: [{ $ref: "#/$defs/B" }, { $ref: "#/$defs/C" }] }] })).toBe(
+			"A & (B | C)",
+		);
 		expect(type({ not: { type: "string" } })).toBe("unknown");
 	});
 });
 
 describe("declareType", () => {
 	it("uses an interface for plain objects and a type alias for everything else", () => {
-		expect(declareType("Pet", { type: "object", required: ["id"], properties: { id: { type: "integer" } } }, ctx)).toBe("export interface Pet {\n\tid: number;\n}");
-		expect(declareType("PetStatus", { type: "string", enum: ["a", "b"] }, ctx)).toBe("export type PetStatus = \"a\" | \"b\";");
-		expect(declareType("Pets", { type: "array", items: { $ref: "#/$defs/Pet" } }, ctx)).toBe("export type Pets = Pet[];");
-		expect(declareType("Labels", { type: "object", additionalProperties: { type: "string" } }, ctx)).toBe("export type Labels = Record<string, string>;");
+		expect(declareType("Pet", { type: "object", required: ["id"], properties: { id: { type: "integer" } } }, ctx)).toBe(
+			"export interface Pet {\n\tid: number;\n}",
+		);
+		expect(declareType("PetStatus", { type: "string", enum: ["a", "b"] }, ctx)).toBe(
+			'export type PetStatus = "a" | "b";',
+		);
+		expect(declareType("Pets", { type: "array", items: { $ref: "#/$defs/Pet" } }, ctx)).toBe(
+			"export type Pets = Pet[];",
+		);
+		expect(declareType("Labels", { type: "object", additionalProperties: { type: "string" } }, ctx)).toBe(
+			"export type Labels = Record<string, string>;",
+		);
 		expect(declareType("Alias", { $ref: "#/$defs/Pet" }, ctx)).toBe("export type Alias = Pet;");
 	});
 
 	it("writes JSDoc from descriptions, formats and deprecation", () => {
-		const code = declareType("Pet", {
-			type: "object",
-			description: "A pet.\nSecond line.",
-			properties: {
-				name: { type: "string", description: "Display name" },
-				born: { type: "string", format: "date" },
-				legacy: { type: "string", deprecated: true, description: "Use name" },
-				evil: { type: "string", description: "ends */ here" },
+		const code = declareType(
+			"Pet",
+			{
+				type: "object",
+				description: "A pet.\nSecond line.",
+				properties: {
+					name: { type: "string", description: "Display name" },
+					born: { type: "string", format: "date" },
+					legacy: { type: "string", deprecated: true, description: "Use name" },
+					evil: { type: "string", description: "ends */ here" },
+				},
 			},
-		}, ctx);
-		expect(code).toBe([
-			"/**",
-			" * A pet.",
-			" * Second line.",
-			" */",
-			"export interface Pet {",
-			"\t/** Display name */",
-			"\tname?: string;",
-			"\t/**",
-			"\t * @format date",
-			"\t */",
-			"\tborn?: string;",
-			"\t/**",
-			"\t * Use name",
-			"\t * @deprecated",
-			"\t */",
-			"\tlegacy?: string;",
-			"\t/** ends *\\/ here */",
-			"\tevil?: string;",
-			"}",
-		].join("\n"));
+			ctx,
+		);
+		expect(code).toBe(
+			[
+				"/**",
+				" * A pet.",
+				" * Second line.",
+				" */",
+				"export interface Pet {",
+				"\t/** Display name */",
+				"\tname?: string;",
+				"\t/**",
+				"\t * @format date",
+				"\t */",
+				"\tborn?: string;",
+				"\t/**",
+				"\t * Use name",
+				"\t * @deprecated",
+				"\t */",
+				"\tlegacy?: string;",
+				"\t/** ends *\\/ here */",
+				"\tevil?: string;",
+				"}",
+			].join("\n"),
+		);
 	});
 });
 
@@ -127,7 +160,12 @@ describe("names", () => {
 
 	it("hands out unique names", () => {
 		const names = new NameRegistry(["Taken"]);
-		expect([names.claim("Pet"), names.claim("Pet"), names.claim("Taken"), names.claim("Blob")]).toEqual(["Pet", "Pet2", "Taken2", "Blob_"]);
+		expect([names.claim("Pet"), names.claim("Pet"), names.claim("Taken"), names.claim("Blob")]).toEqual([
+			"Pet",
+			"Pet2",
+			"Taken2",
+			"Blob_",
+		]);
 	});
 });
 
@@ -135,9 +173,11 @@ describe("generated types compile and agree with the validator", () => {
 	function generate(specName: string) {
 		const spec = parseSpec(fixture(specName));
 		const names = new NameRegistry();
-		const tsName = new Map(Object.keys(spec.schemas).map(name => [name, names.claim(pascalCase(name))]));
-		const context: TypeContext = { refName: name => tsName.get(name)! };
-		const code = Object.entries(spec.schemas).map(([name, schema]) => declareType(tsName.get(name)!, schema, context)).join("\n\n");
+		const tsName = new Map(Object.keys(spec.schemas).map((name) => [name, names.claim(pascalCase(name))]));
+		const context: TypeContext = { refName: (name) => tsName.get(name)! };
+		const code = Object.entries(spec.schemas)
+			.map(([name, schema]) => declareType(tsName.get(name)!, schema, context))
+			.join("\n\n");
 		const defs = spec.schemas as Record<string, JsonSchema>;
 		const check = (name: string, value: unknown) => validate(jsonSchema({ $ref: `#/$defs/${name}` }, defs), value);
 		return { code, check };
@@ -196,7 +236,17 @@ export const wrong: NewPet = { name: "x", kind: "fish" };
 		const { check } = generate("shop-3.0.json");
 		const ok = async (name: string, value: unknown) => (await check(name, value)).success;
 
-		expect(await ok("Pet", { id: 1, name: "Rex", tag: null, status: "sold", category: { id: 2 }, labels: { a: "b" }, weight: 1 })).toBe(true);
+		expect(
+			await ok("Pet", {
+				id: 1,
+				name: "Rex",
+				tag: null,
+				status: "sold",
+				category: { id: 2 },
+				labels: { a: "b" },
+				weight: 1,
+			}),
+		).toBe(true);
 		expect(await ok("Pet", { name: "Rex" })).toBe(false); // id is required
 		expect(await ok("Pet", { id: 1, name: "" })).toBe(false); // minLength
 		expect(await ok("Pet", { id: 1, name: "Rex", status: "gone" })).toBe(false); // enum

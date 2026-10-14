@@ -42,9 +42,14 @@ export function mockFetch(...responders: (Responder | Response)[]) {
 
 /** fetch that waits for the abort signal (or never resolves) */
 export function hangingFetch() {
-	return vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
-		init.signal?.addEventListener("abort", () => reject(init.signal!.reason ?? new DOMException("Aborted", "AbortError")));
-	}));
+	return vi.fn(
+		(_url: string, init: RequestInit) =>
+			new Promise<Response>((_resolve, reject) => {
+				init.signal?.addEventListener("abort", () =>
+					reject(init.signal!.reason ?? new DOMException("Aborted", "AbortError")),
+				);
+			}),
+	);
 }
 
 export async function readBody(body: BodyInit | null | undefined): Promise<string> {
@@ -58,7 +63,7 @@ export function chunked(chunks: (string | Uint8Array)[], init: ResponseInit = {}
 	let index = 0;
 	const body = new ReadableStream<Uint8Array>({
 		async pull(controller) {
-			if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+			if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
 			if (index >= chunks.length) return controller.close();
 			const chunk = chunks[index++]!;
 			controller.enqueue(typeof chunk === "string" ? encoder.encode(chunk) : chunk);

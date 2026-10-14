@@ -1,19 +1,21 @@
 // Client
 export type { Api, BodyOptions, ClientOptions, ErrorsOf, RequestOptions } from "./core/client";
 export { Client, ClientBuilder, createApi, createClient } from "./core/client";
-export type { ClientConfig, Hooks, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, Unwrap } from "./core/config";
+export type {
+	ClientConfig,
+	Hooks,
+	OnErrorHook,
+	OnRequestHook,
+	OnResponseHook,
+	OnRetryHook,
+	OnSuccessHook,
+	Unwrap,
+} from "./core/config";
 export type { ErrorSchemas, IdempotentOptions, InferErrors, MergeErrors } from "./core/request";
 export { RequestBuilder } from "./core/request";
 
 // Contracts
-export type {
-	BoundContract,
-	Contract,
-	EndpointData,
-	EndpointErrors,
-	EndpointFn,
-	EndpointInput,
-} from "./contract";
+export type { BoundContract, Contract, EndpointData, EndpointErrors, EndpointFn, EndpointInput } from "./contract";
 export type { EndpointSpec } from "./contract";
 export { defineContract, Endpoint, endpoint } from "./contract";
 

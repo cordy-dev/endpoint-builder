@@ -94,7 +94,7 @@ export function refreshable(options: RefreshableOptions): AuthStrategy {
 			const token = await options.getToken();
 			if (token) ctx.headers.set(header, scheme + token);
 		},
-		shouldRefresh: options.shouldRefresh ?? (response => response.status === 401),
+		shouldRefresh: options.shouldRefresh ?? ((response) => response.status === 401),
 		refresh(ctx) {
 			inflight ??= (async () => {
 				try {
@@ -112,7 +112,7 @@ export function refreshable(options: RefreshableOptions): AuthStrategy {
 
 /** Auth middleware: applies `ctx.auth` and replays once after a successful refresh */
 export function authMiddleware(): Middleware {
-	return (ctx, next) => ctx.auth ? withAuth(ctx.auth, ctx, next) : next(ctx);
+	return (ctx, next) => (ctx.auth ? withAuth(ctx.auth, ctx, next) : next(ctx));
 }
 
 async function withAuth(auth: AuthStrategy, ctx: RequestContext, next: Next): Promise<Response> {

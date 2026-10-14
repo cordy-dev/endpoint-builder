@@ -24,7 +24,7 @@ export function isErr<T, E>(result: Result<T, E>): result is Extract<Result<T, E
 /** Return the data or throw the error */
 export function unwrap<T, E>(result: Result<T, E>): T {
 	if (result.ok) return result.data;
-	// eslint-disable-next-line @typescript-eslint/only-throw-error
+	// oxlint-disable-next-line typescript/only-throw-error
 	throw result.error;
 }
 

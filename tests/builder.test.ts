@@ -76,7 +76,7 @@ describe("RequestBuilder", () => {
 		await list;
 		await page2;
 		await list;
-		expect(fetch.calls.map(c => c.url)).toEqual([
+		expect(fetch.calls.map((c) => c.url)).toEqual([
 			"https://api.test/users",
 			"https://api.test/users?page=2",
 			"https://api.test/users",
@@ -103,8 +103,11 @@ describe("RequestBuilder", () => {
 	it("validates query and json inline", async () => {
 		const fetch = mockFetch(json({}));
 		const api = createClient({ baseUrl: "https://api.test", fetch });
-		const Body = z.object({ n: z.number().transform(n => n * 2) });
-		await api.post("/x").json({ n: 2 }, Body).query({ q: "1" }, z.object({ q: z.coerce.number() }));
+		const Body = z.object({ n: z.number().transform((n) => n * 2) });
+		await api
+			.post("/x")
+			.json({ n: 2 }, Body)
+			.query({ q: "1" }, z.object({ q: z.coerce.number() }));
 		expect(fetch.calls[0]!.url).toBe("https://api.test/x?q=1");
 		expect(await new Response(fetch.calls[0]!.body).json()).toEqual({ n: 4 });
 		// @ts-expect-error n must be a number
@@ -128,13 +131,15 @@ describe("middleware & hooks", () => {
 	it("runs middleware in order around the request", async () => {
 		const fetch = mockFetch(json({ ok: true }));
 		const order: string[] = [];
-		const tag = (name: string): Middleware => async (ctx, next) => {
-			order.push(`${name}:before`);
-			ctx.headers.set(`x-${name}`, "1");
-			const response = await next(ctx);
-			order.push(`${name}:after`);
-			return response;
-		};
+		const tag =
+			(name: string): Middleware =>
+			async (ctx, next) => {
+				order.push(`${name}:before`);
+				ctx.headers.set(`x-${name}`, "1");
+				const response = await next(ctx);
+				order.push(`${name}:after`);
+				return response;
+			};
 		const api = createClient({ baseUrl: "https://api.test", fetch, middleware: [tag("a"), tag("b")] });
 		await api.get("/");
 		expect(order).toEqual(["a:before", "b:before", "b:after", "a:after"]);
@@ -143,7 +148,7 @@ describe("middleware & hooks", () => {
 
 	it("middleware can short-circuit (cache, mocks)", async () => {
 		const fetch = mockFetch(json({ from: "network" }));
-		const cache: Middleware = async (ctx, next) => ctx.url.endsWith("/cached") ? json({ from: "cache" }) : next(ctx);
+		const cache: Middleware = async (ctx, next) => (ctx.url.endsWith("/cached") ? json({ from: "cache" }) : next(ctx));
 		const api = Client.builder("https://api.test").fetch(fetch).use(cache).build();
 		expect(await api.get("/cached")).toEqual({ from: "cache" });
 		expect(fetch).not.toHaveBeenCalled();
@@ -154,7 +159,12 @@ describe("middleware & hooks", () => {
 		const api = createClient({
 			baseUrl: "https://api.test",
 			fetch: mockFetch(json({})),
-			middleware: [async (ctx, next) => { seen.push(ctx.meta.feature); return next(ctx); }],
+			middleware: [
+				async (ctx, next) => {
+					seen.push(ctx.meta.feature);
+					return next(ctx);
+				},
+			],
 		});
 		await api.get("/").meta("feature", "search");
 		expect(seen).toEqual(["search"]);
@@ -162,7 +172,9 @@ describe("middleware & hooks", () => {
 
 	it("hooks observe requests, responses and errors", async () => {
 		const fetch = mockFetch(json({ ok: true }), json({}, { status: 400 }));
-		const onRequest = vi.fn((ctx: { headers: Headers }) => { ctx.headers.set("x-hook", "1"); });
+		const onRequest = vi.fn((ctx: { headers: Headers }) => {
+			ctx.headers.set("x-hook", "1");
+		});
 		const onResponse = vi.fn();
 		const onError = vi.fn();
 		const api = createClient({ baseUrl: "https://api.test", fetch, onRequest, onResponse, onError, retry: false });

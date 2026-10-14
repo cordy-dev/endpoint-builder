@@ -26,7 +26,10 @@ const hasSignalAny = typeof AbortSignal !== "undefined" && typeof AbortSignal.an
  * wired to the response body after the timeout was released (important for streams); the fallback
  * listener is removed on release.
  */
-function linkSignals(user: AbortSignal | undefined, controller: AbortController): { signal: AbortSignal; dispose: () => void } {
+function linkSignals(
+	user: AbortSignal | undefined,
+	controller: AbortController,
+): { signal: AbortSignal; dispose: () => void } {
 	if (!user) return { signal: controller.signal, dispose: () => undefined };
 	if (hasSignalAny) return { signal: AbortSignal.any([user, controller.signal]), dispose: () => undefined };
 	const onAbort = () => controller.abort(user.reason);
@@ -36,12 +39,12 @@ function linkSignals(user: AbortSignal | undefined, controller: AbortController)
 
 /** Terminal pipeline handler: performs the actual `fetch` with timeout + abort handling */
 export function createTransport(fetchImpl: FetchLike | undefined): Next {
-	return async ctx => {
+	return async (ctx) => {
 		const request = errorRequest(ctx);
 		const userSignal = ctx.signal;
 		if (userSignal?.aborted) throw new AbortError(request, userSignal.reason);
 
-		const doFetch = fetchImpl ?? (globalThis.fetch as FetchLike);
+		const doFetch = fetchImpl ?? globalThis.fetch;
 		const timeout = ctx.timeout;
 		const init: RequestInit & { duplex?: "half" } = {
 			...ctx.init,

@@ -62,7 +62,7 @@ export function mergeRetry(base: RetryOptions | false, override: RetryInput | un
 	if (override === undefined) return base;
 	const next = normalizeRetry(override);
 	if (next === false) return false;
-	return typeof override === "object" || typeof override === "number" ? { ...(base || {}), ...next } : (base || next);
+	return typeof override === "object" || typeof override === "number" ? { ...base, ...next } : base || next;
 }
 
 function parseRetryAfter(value: string | null): number | undefined {
@@ -95,10 +95,14 @@ export function computeDelay(policy: RetryOptions, state: RetryState): number | 
 
 	const base = policy.delay ?? 300;
 	const backoff = policy.backoff ?? "exponential";
-	const raw = typeof backoff === "function" ? backoff(state.attempt)
-		: backoff === "linear" ? base * state.attempt
-			: backoff === "constant" ? base
-				: base * 2 ** (state.attempt - 1);
+	const raw =
+		typeof backoff === "function"
+			? backoff(state.attempt)
+			: backoff === "linear"
+				? base * state.attempt
+				: backoff === "constant"
+					? base
+					: base * 2 ** (state.attempt - 1);
 	const capped = Math.min(raw, maxDelay);
 	return policy.jitter === false ? capped : capped / 2 + Math.random() * (capped / 2);
 }
@@ -112,7 +116,7 @@ function isReplayable(ctx: RequestContext): boolean {
 
 /** Retry middleware. Reads the effective policy from `ctx.retry`, so it is composed once per client. */
 export function retryMiddleware(listeners: readonly RetryListener[] = []): Middleware {
-	return (ctx, next) => ctx.retry && isReplayable(ctx) ? withRetry(ctx.retry, ctx, next) : next(ctx);
+	return (ctx, next) => (ctx.retry && isReplayable(ctx) ? withRetry(ctx.retry, ctx, next) : next(ctx));
 
 	async function withRetry(policy: RetryOptions, ctx: RequestContext, next: Next): Promise<Response> {
 		const limit = policy.limit ?? 2;

@@ -13,17 +13,23 @@ describe("onSuccess", () => {
 		const api = createClient({
 			baseUrl: base,
 			fetch: mockFetch(json({ id: 1, name: "ann" })),
-			onSuccess: (data, response) => { seen.push(["client", data, response.status]); },
+			onSuccess: (data, response) => {
+				seen.push(["client", data, response.status]);
+			},
 		});
-		const name = await api.get("/u")
+		const name = await api
+			.get("/u")
 			.returns(User)
-			.map(user => user.name.toUpperCase())
+			.map((user) => user.name.toUpperCase())
 			.onSuccess((data) => {
 				expectTypeOf(data).toEqualTypeOf<string>();
 				seen.push(["request", data]);
 			});
 		expect(name).toBe("ANN");
-		expect(seen).toEqual([["client", "ANN", 200], ["request", "ANN"]]);
+		expect(seen).toEqual([
+			["client", "ANN", 200],
+			["request", "ANN"],
+		]);
 	});
 
 	it("is skipped on errors, and a throwing hook fails the request", async () => {
@@ -33,7 +39,11 @@ describe("onSuccess", () => {
 		expect(onSuccess).not.toHaveBeenCalled();
 
 		const ok = createClient({ baseUrl: base, fetch: mockFetch(json({})) });
-		await expect(ok.get("/u").onSuccess(() => { throw new RangeError("hook bug"); })).rejects.toBeInstanceOf(RangeError);
+		await expect(
+			ok.get("/u").onSuccess(() => {
+				throw new RangeError("hook bug");
+			}),
+		).rejects.toBeInstanceOf(RangeError);
 	});
 });
 
@@ -44,12 +54,23 @@ describe("request-level hooks", () => {
 		const api = createClient({
 			baseUrl: base,
 			fetch,
-			onRequest: (ctx) => { order.push("client:request"); ctx.headers.set("x-client", "1"); },
-			onResponse: () => { order.push("client:response"); },
+			onRequest: (ctx) => {
+				order.push("client:request");
+				ctx.headers.set("x-client", "1");
+			},
+			onResponse: () => {
+				order.push("client:response");
+			},
 		});
-		await api.get("/u")
-			.onRequest((ctx) => { order.push("request:request"); ctx.headers.set("x-request", ctx.headers.get("x-client") ?? "missing"); })
-			.onResponse((response) => { order.push(`request:response:${response.status}`); });
+		await api
+			.get("/u")
+			.onRequest((ctx) => {
+				order.push("request:request");
+				ctx.headers.set("x-request", ctx.headers.get("x-client") ?? "missing");
+			})
+			.onResponse((response) => {
+				order.push(`request:response:${response.status}`);
+			});
 		expect(order).toEqual(["client:request", "request:request", "client:response", "request:response:200"]);
 		expect(fetch.calls[0]!.headers.get("x-request")).toBe("1");
 	});
@@ -76,12 +97,18 @@ describe("request-level hooks", () => {
 			baseUrl: base,
 			fetch: mockFetch(json({}, { status: 404 })),
 			retry: false,
-			onError: (error) => { order.push(`client:${error.type}`); },
+			onError: (error) => {
+				order.push(`client:${error.type}`);
+			},
 		});
-		const result = await api.get("/u").onError((error) => {
-			order.push(`request:${error.type}`);
-			throw new Error("wrapped");
-		}).safe().catch((e: unknown) => e);
+		const result = await api
+			.get("/u")
+			.onError((error) => {
+				order.push(`request:${error.type}`);
+				throw new Error("wrapped");
+			})
+			.safe()
+			.catch((e: unknown) => e);
 		expect((result as Error).message).toBe("wrapped");
 		expect(order).toEqual(["client:http", "request:http"]);
 

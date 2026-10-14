@@ -3,7 +3,17 @@ import type { Middleware } from "../middleware";
 import type { Limiter, RateLimit } from "../middleware/limit";
 import type { RetryOptions } from "../retry";
 import type { Schema } from "../schema";
-import type { FetchLike, OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook, QueryObject, RequestInitExtras, ResponseType } from "../types";
+import type {
+	FetchLike,
+	OnErrorHook,
+	OnRequestHook,
+	OnResponseHook,
+	OnRetryHook,
+	OnSuccessHook,
+	QueryObject,
+	RequestInitExtras,
+	ResponseType,
+} from "../types";
 import type { QuerySerializer } from "../utils/query";
 
 export type { OnErrorHook, OnRequestHook, OnResponseHook, OnRetryHook, OnSuccessHook } from "../types";

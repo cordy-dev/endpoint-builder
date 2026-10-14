@@ -10,7 +10,7 @@ export default defineConfig({
 			clean: true,
 			include: ["src/**/*.ts"], // Include all TypeScript files in the src directory
 			// Extend the default exclude patterns to exclude test files
-			exclude: [...coverageConfigDefaults.exclude, "**/*.spec.ts", "**/*.test.ts"]
-		}
-	}
+			exclude: [...coverageConfigDefaults.exclude, "**/*.spec.ts", "**/*.test.ts"],
+		},
+	},
 });

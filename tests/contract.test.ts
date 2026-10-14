@@ -2,7 +2,18 @@ import * as v from "valibot";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 
-import { type ApiError, type Client, createApi, defineContract, type Endpoint, endpoint, type EndpointInput, HttpError, isHttpError, ValidationError } from "../src";
+import {
+	type ApiError,
+	type Client,
+	createApi,
+	defineContract,
+	type Endpoint,
+	endpoint,
+	type EndpointInput,
+	HttpError,
+	isHttpError,
+	ValidationError,
+} from "../src";
 import { json, mockFetch, readBody } from "./helpers";
 
 const User = z.object({ id: z.number(), name: z.string() });
@@ -35,7 +46,9 @@ describe("contracts", () => {
 
 	it("derives input types from schemas", () => {
 		type ListInput = EndpointInput<typeof contract.users.list>;
-		expectTypeOf<ListInput["query"]>().toEqualTypeOf<{ page?: number | undefined; search?: string | undefined } | undefined>();
+		expectTypeOf<ListInput["query"]>().toEqualTypeOf<
+			{ page?: number | undefined; search?: string | undefined } | undefined
+		>();
 
 		type CreateInput = EndpointInput<typeof contract.users.create>;
 		expectTypeOf<CreateInput["body"]>().toEqualTypeOf<{ name: string; email: string }>();
@@ -66,7 +79,7 @@ describe("contracts", () => {
 		expect(fetch).not.toHaveBeenCalled();
 
 		await api.users.create({ body: { name: "a", email: "a@b.co" } });
-		expect(await readBody(fetch.calls[0]!.body)).toBe("{\"name\":\"a\",\"email\":\"a@b.co\"}");
+		expect(await readBody(fetch.calls[0]!.body)).toBe('{"name":"a","email":"a@b.co"}');
 	});
 
 	it("validates query with valibot and params with zod", async () => {
@@ -85,7 +98,12 @@ describe("contracts", () => {
 
 	it("types declared errors per status (client + endpoint)", async () => {
 		const fetch = mockFetch(json({ message: "no user" }, { status: 404 }));
-		const api = createApi(contract, { baseUrl: "https://api.test", fetch, retry: false, errors: { 401: Unauthorized } });
+		const api = createApi(contract, {
+			baseUrl: "https://api.test",
+			fetch,
+			retry: false,
+			errors: { 401: Unauthorized },
+		});
 
 		const { error } = await api.users.get({ params: { id: 7 } }).safe();
 		expectTypeOf(error).toEqualTypeOf<ApiError<{ 401: { reason: string }; 404: { message: string } }> | undefined>();
@@ -176,7 +194,12 @@ describe("createApi", () => {
 
 	it("accumulates declared errors in the type, also through $with", async () => {
 		const Unauthorized = z.object({ reason: z.string() });
-		const api = createApi(contract, { baseUrl: "https://api.test", fetch: mockFetch(json({ reason: "no" }, { status: 401 })), retry: false, errors: { 401: Unauthorized } });
+		const api = createApi(contract, {
+			baseUrl: "https://api.test",
+			fetch: mockFetch(json({ reason: "no" }, { status: 401 })),
+			retry: false,
+			errors: { 401: Unauthorized },
+		});
 		const { error } = await api.users.get({ params: { id: 1 } }).safe();
 		expectTypeOf(error).toEqualTypeOf<ApiError<{ 401: { reason: string }; 404: { message: string } }> | undefined>();
 		expect(isHttpError(error, 401)).toBe(true);
@@ -187,6 +210,6 @@ describe("createApi", () => {
 
 	it("rejects contract keys that would clash with its own members", () => {
 		const clash = defineContract({ $client: endpoint.get("/x") });
-		expect(() => createApi(clash)).toThrow("\"$client\" is reserved");
+		expect(() => createApi(clash)).toThrow('"$client" is reserved');
 	});
 });

@@ -8,7 +8,7 @@ import { json, mockFetch } from "./helpers";
 async function check(schema: JsonSchema | boolean, value: unknown, defs: Record<string, JsonSchema> = {}) {
 	const outcome = await validate(jsonSchema(schema, defs), value);
 	if (outcome.success) return "ok";
-	return outcome.issues.map(issue => `${(issue.path ?? []).join(".")}: ${issue.message}`);
+	return outcome.issues.map((issue) => `${(issue.path ?? []).join(".")}: ${issue.message}`);
 }
 
 describe("jsonSchema: types", () => {
@@ -33,7 +33,9 @@ describe("jsonSchema: types", () => {
 	});
 
 	it("a type mismatch is one issue, not a cascade", async () => {
-		expect(await check({ type: "string", minLength: 3, enum: ["abc"], pattern: "^a" }, 5)).toEqual([": Expected string, received number"]);
+		expect(await check({ type: "string", minLength: 3, enum: ["abc"], pattern: "^a" }, 5)).toEqual([
+			": Expected string, received number",
+		]);
 	});
 
 	it("true and false schemas", async () => {
@@ -46,9 +48,9 @@ describe("jsonSchema: types", () => {
 describe("jsonSchema: constraints", () => {
 	it("enum and const compare deeply", async () => {
 		expect(await check({ enum: ["a", 1, null, { x: [1] }] }, { x: [1] })).toBe("ok");
-		expect(await check({ enum: ["a", "b"] }, "c")).toEqual([": Expected one of \"a\", \"b\""]);
+		expect(await check({ enum: ["a", "b"] }, "c")).toEqual([': Expected one of "a", "b"']);
 		expect(await check({ const: { a: 1 } }, { a: 1 })).toBe("ok");
-		expect(await check({ const: "x" }, "y")).toEqual([": Expected \"x\""]);
+		expect(await check({ const: "x" }, "y")).toEqual([': Expected "x"']);
 	});
 
 	it("string keywords (length counts code points) and patterns", async () => {
@@ -85,16 +87,26 @@ describe("jsonSchema: constraints", () => {
 			"1: Expected integer, received string",
 			"3: Expected integer, received string",
 		]);
-		expect(await check({ type: "array", uniqueItems: true }, [1, { a: 1 }, 2, { a: 1 }])).toEqual(["3: Items must be unique"]);
-		expect(await check({ type: "array", prefixItems: [{ type: "string" }, { type: "number" }], items: false }, ["a", 1])).toBe("ok");
-		expect(await check({ type: "array", prefixItems: [{ type: "string" }], items: false }, ["a", 1])).toEqual(["1: No value is allowed here"]);
+		expect(await check({ type: "array", uniqueItems: true }, [1, { a: 1 }, 2, { a: 1 }])).toEqual([
+			"3: Items must be unique",
+		]);
+		expect(
+			await check({ type: "array", prefixItems: [{ type: "string" }, { type: "number" }], items: false }, ["a", 1]),
+		).toBe("ok");
+		expect(await check({ type: "array", prefixItems: [{ type: "string" }], items: false }, ["a", 1])).toEqual([
+			"1: No value is allowed here",
+		]);
 	});
 
 	it("object keywords with exact paths", async () => {
 		const schema: JsonSchema = {
 			type: "object",
 			required: ["id", "tags"],
-			properties: { id: { type: "integer" }, tags: { type: "array", items: { type: "string" } }, owner: { type: "object", required: ["name"], properties: { name: { type: "string" } } } },
+			properties: {
+				id: { type: "integer" },
+				tags: { type: "array", items: { type: "string" } },
+				owner: { type: "object", required: ["name"], properties: { name: { type: "string" } } },
+			},
 		};
 		expect(await check(schema, { id: 1, tags: ["a"], extra: true })).toBe("ok"); // extra properties are allowed
 		expect(await check(schema, { id: "1", tags: ["a", 2], owner: {} })).toEqual([
@@ -107,19 +119,27 @@ describe("jsonSchema: constraints", () => {
 	});
 
 	it("additionalProperties and property counts", async () => {
-		expect(await check({ type: "object", properties: { a: {} }, additionalProperties: false }, { a: 1, b: 2, c: 3 })).toEqual([
-			"b: Unexpected property",
-			"c: Unexpected property",
+		expect(
+			await check({ type: "object", properties: { a: {} }, additionalProperties: false }, { a: 1, b: 2, c: 3 }),
+		).toEqual(["b: Unexpected property", "c: Unexpected property"]);
+		expect(await check({ type: "object", additionalProperties: { type: "number" } }, { a: 1, b: "x" })).toEqual([
+			"b: Expected number, received string",
 		]);
-		expect(await check({ type: "object", additionalProperties: { type: "number" } }, { a: 1, b: "x" })).toEqual(["b: Expected number, received string"]);
 		expect(await check({ type: "object", minProperties: 1 }, {})).toEqual([": Must have at least 1 properties"]);
-		expect(await check({ type: "object", maxProperties: 1 }, { a: 1, b: 2 })).toEqual([": Must have at most 1 properties"]);
+		expect(await check({ type: "object", maxProperties: 1 }, { a: 1, b: 2 })).toEqual([
+			": Must have at most 1 properties",
+		]);
 	});
 });
 
 describe("jsonSchema: combinators and references", () => {
 	it("allOf collects the issues of every member", async () => {
-		const schema: JsonSchema = { allOf: [{ type: "object", required: ["a"] }, { type: "object", required: ["b"] }] };
+		const schema: JsonSchema = {
+			allOf: [
+				{ type: "object", required: ["a"] },
+				{ type: "object", required: ["b"] },
+			],
+		};
 		expect(await check(schema, { a: 1, b: 1 })).toBe("ok");
 		expect(await check(schema, {})).toEqual(["a: Required", "b: Required"]);
 	});
@@ -127,8 +147,16 @@ describe("jsonSchema: combinators and references", () => {
 	it("anyOf / oneOf report the closest alternative", async () => {
 		const schema: JsonSchema = {
 			anyOf: [
-				{ type: "object", required: ["kind", "radius"], properties: { kind: { const: "circle" }, radius: { type: "number" } } },
-				{ type: "object", required: ["kind", "side"], properties: { kind: { const: "square" }, side: { type: "number" } } },
+				{
+					type: "object",
+					required: ["kind", "radius"],
+					properties: { kind: { const: "circle" }, radius: { type: "number" } },
+				},
+				{
+					type: "object",
+					required: ["kind", "side"],
+					properties: { kind: { const: "square" }, side: { type: "number" } },
+				},
 			],
 		};
 		expect(await check(schema, { kind: "square", side: 2 })).toBe("ok");
@@ -147,11 +175,17 @@ describe("jsonSchema: combinators and references", () => {
 			Node: {
 				type: "object",
 				required: ["name"],
-				properties: { name: { type: "string" }, children: { type: "array", items: { $ref: "#/$defs/Node" } }, parent: { anyOf: [{ $ref: "#/$defs/Node" }, { type: "null" }] } },
+				properties: {
+					name: { type: "string" },
+					children: { type: "array", items: { $ref: "#/$defs/Node" } },
+					parent: { anyOf: [{ $ref: "#/$defs/Node" }, { type: "null" }] },
+				},
 			},
 		};
 		const ref = { $ref: "#/$defs/Node" };
-		expect(await check(ref, { name: "root", children: [{ name: "a", children: [{ name: "b" }] }], parent: null }, defs)).toBe("ok");
+		expect(
+			await check(ref, { name: "root", children: [{ name: "a", children: [{ name: "b" }] }], parent: null }, defs),
+		).toBe("ok");
 		expect(await check(ref, { name: "root", children: [{ name: "a", children: [{ name: 1 }] }] }, defs)).toEqual([
 			"children.0.children.0.name: Expected string, received number",
 		]);
@@ -159,19 +193,32 @@ describe("jsonSchema: combinators and references", () => {
 
 	it("an unknown reference fails loudly, a foreign one is rejected when the schema is built", async () => {
 		const outcome = await validate(jsonSchema({ $ref: "#/$defs/Missing" }), 1);
-		expect(outcome).toMatchObject({ success: false, issues: [{ message: expect.stringContaining("Unknown schema reference") }] });
+		expect(outcome).toMatchObject({
+			success: false,
+			issues: [{ message: expect.stringContaining("Unknown schema reference") }],
+		});
 		expect(() => jsonSchema({ $ref: "#/components/schemas/X" })).toThrow("Unsupported $ref");
 	});
 
 	it("stops collecting after 100 issues", async () => {
-		const issues = await check({ type: "array", items: { type: "string" } }, Array.from({ length: 10_000 }, () => 1));
+		const issues = await check(
+			{ type: "array", items: { type: "string" } },
+			Array.from({ length: 10_000 }, () => 1),
+		);
 		expect(issues).toHaveLength(100);
 	});
 });
 
 describe("jsonSchema as a Standard Schema", () => {
-	interface User { id: number; name: string }
-	const User = jsonSchema<User>({ type: "object", required: ["id", "name"], properties: { id: { type: "integer" }, name: { type: "string" } } });
+	interface User {
+		id: number;
+		name: string;
+	}
+	const User = jsonSchema<User>({
+		type: "object",
+		required: ["id", "name"],
+		properties: { id: { type: "integer" }, name: { type: "string" } },
+	});
 
 	it("carries T as input and output type", () => {
 		expectTypeOf<InferOutput<typeof User>>().toEqualTypeOf<User>();
@@ -191,12 +238,15 @@ describe("jsonSchema as a Standard Schema", () => {
 		expect(await api.get("/u").returns(User)).toEqual({ id: 1, name: "Ann" });
 		const { error } = await api.get("/u").returns(User).safe();
 		expect(error).toBeInstanceOf(ValidationError);
-		expect(error!.message).toBe("Invalid response at \"id\": Expected integer, received string");
+		expect(error!.message).toBe('Invalid response at "id": Expected integer, received string');
 
 		await api.post("/u").json({ id: 2, name: "Bo" }, User);
 		// @ts-expect-error the body must be a User
 		void api.post("/u").json({ id: "2" }, User);
-		const bad = await api.post("/u").json({ id: "2" } as unknown as User, User).safe();
+		const bad = await api
+			.post("/u")
+			.json({ id: "2" } as unknown as User, User)
+			.safe();
 		expect((bad.error as ValidationError).stage).toBe("body");
 	});
 });

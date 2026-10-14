@@ -26,7 +26,7 @@ A full redesign. See [MIGRATION.md](./MIGRATION.md) for the upgrade guide and [d
 - `maxBytes` option for `.sse()` and `.ndjson()`: the stream ends with a `SizeLimitError` after that many bytes, which also bounds an endless line.
 - `.idempotent()` (on requests and contract endpoints): sends an `Idempotency-Key` header, one key per call shared by its retries, and lets the retry policy retry POST and PATCH.
 - Limits: `concurrency` and `rateLimit` queue requests (aborting a queued request never touches the network, retries count too); `maxResponseBytes` rejects oversized bodies with the new `SizeLimitError` (`type: "size"`) without reading them.
-- Documentation for AI coding assistants: `llms.txt` (rules and common mistakes) and `llms-full.txt` (README and migration guide in one file) ship in the package; `AGENTS.md` / `CLAUDE.md` guide agents working on this repository. A test keeps `llms-full.txt` in sync (`npm run docs:llms`).
+- Documentation for AI coding assistants: `llms.txt` (rules and common mistakes) and `llms-full.txt` (README and migration guide in one file) ship in the package; `AGENTS.md` / `CLAUDE.md` guide agents working on this repository. A test keeps `llms-full.txt` in sync (`bun run docs:llms`).
 - Path params: optional params (`:id?`), OpenAPI style (`{id}`) and `:name.json`. Values are URI-encoded.
 - Configurable query serialization with `repeat`, `brackets`, `indices` or `comma` array formats, and nested objects.
 - `fetch` injection, `init` passthrough and default query params.

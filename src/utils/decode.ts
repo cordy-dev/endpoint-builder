@@ -34,11 +34,16 @@ export async function decodeBody(response: Response, type: ResponseType, request
 	if (isBodyless(response, request.method)) return undefined;
 
 	switch (type) {
-		case "json": return parseJson(await response.text(), request);
-		case "text": return response.text();
-		case "blob": return response.blob();
-		case "arrayBuffer": return response.arrayBuffer();
-		case "formData": return response.formData();
+		case "json":
+			return parseJson(await response.text(), request);
+		case "text":
+			return response.text();
+		case "blob":
+			return response.blob();
+		case "arrayBuffer":
+			return response.arrayBuffer();
+		case "formData":
+			return response.formData();
 	}
 
 	const contentType = response.headers.get("content-type");

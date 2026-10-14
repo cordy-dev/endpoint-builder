@@ -18,7 +18,7 @@ describe("client basics", () => {
 		for (const [baseUrl, path] of variants) {
 			await createClient({ baseUrl, fetch }).get(path);
 		}
-		expect(fetch.calls.map(c => c.url)).toEqual(Array(4).fill("https://api.test/users"));
+		expect(fetch.calls.map((c) => c.url)).toEqual(Array(4).fill("https://api.test/users"));
 	});
 
 	it("keeps base path segments and absolute URLs", async () => {
@@ -26,7 +26,7 @@ describe("client basics", () => {
 		const api = createClient({ baseUrl: "https://api.test/v2", fetch });
 		await api.get("/users");
 		await api.get("https://other.test/x");
-		expect(fetch.calls.map(c => c.url)).toEqual(["https://api.test/v2/users", "https://other.test/x"]);
+		expect(fetch.calls.map((c) => c.url)).toEqual(["https://api.test/v2/users", "https://other.test/x"]);
 	});
 
 	it("accepts a base URL string", async () => {
@@ -56,7 +56,7 @@ describe("client basics", () => {
 		expect(user).toEqual({ id: 1, name: "a" });
 		expect(fetch.calls[0]!.method).toBe("POST");
 		expect(fetch.calls[0]!.headers.get("content-type")).toBe("application/json");
-		expect(await readBody(fetch.calls[0]!.body)).toBe("{\"name\":\"a\"}");
+		expect(await readBody(fetch.calls[0]!.body)).toBe('{"name":"a"}');
 	});
 
 	it("passes native bodies through untouched", async () => {
@@ -109,7 +109,7 @@ describe("responses", () => {
 	it("decodes JSON, +json, text and empty bodies", async () => {
 		const fetch = mockFetch(
 			json({ a: 1 }),
-			new Response("{\"title\":\"x\"}", { headers: { "content-type": "application/problem+json" } }),
+			new Response('{"title":"x"}', { headers: { "content-type": "application/problem+json" } }),
 			new Response("hello", { headers: { "content-type": "text/plain" } }),
 			new Response(null, { status: 204 }),
 		);
@@ -173,10 +173,11 @@ describe("responses", () => {
 	it("map() transforms validated data in order", async () => {
 		const fetch = mockFetch(json({ id: 1, name: "ann" }));
 		const api = createClient({ baseUrl: "https://api.test", fetch });
-		const result = await api.get("/")
+		const result = await api
+			.get("/")
 			.returns(User)
-			.map(user => user.name)
-			.map(async name => name.toUpperCase());
+			.map((user) => user.name)
+			.map(async (name) => name.toUpperCase());
 		expectTypeOf(result).toEqualTypeOf<string>();
 		expect(result).toBe("ANN");
 	});
@@ -197,7 +198,9 @@ describe("errors", () => {
 	});
 
 	it("wraps fetch failures into NetworkError", async () => {
-		const fetch = mockFetch(() => { throw new TypeError("fetch failed"); });
+		const fetch = mockFetch(() => {
+			throw new TypeError("fetch failed");
+		});
 		const api = createClient({ baseUrl: "https://api.test", fetch, retry: false });
 		const { error } = await api.get("/").safe();
 		expect(error).toBeInstanceOf(NetworkError);
@@ -227,6 +230,13 @@ describe("errors", () => {
 	it("safe() rethrows programming errors", async () => {
 		const fetch = mockFetch(json({ id: 1 }));
 		const api = createClient({ baseUrl: "https://api.test", fetch });
-		await expect(api.get("/").map(() => { throw new RangeError("bug"); }).safe()).rejects.toBeInstanceOf(RangeError);
+		await expect(
+			api
+				.get("/")
+				.map(() => {
+					throw new RangeError("bug");
+				})
+				.safe(),
+		).rejects.toBeInstanceOf(RangeError);
 	});
 });

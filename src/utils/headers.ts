@@ -20,7 +20,9 @@ export function toHeaderRecord(input: HeadersInput | undefined): Record<string, 
 	const out: Record<string, string | null> = {};
 	if (!input) return out;
 	if (input instanceof Headers || Array.isArray(input)) {
-		new Headers(input).forEach((value, key) => { out[key] = value; });
+		new Headers(input).forEach((value, key) => {
+			out[key] = value;
+		});
 		return out;
 	}
 	for (const key in input) {

@@ -25,8 +25,8 @@ export function toFormData(input: FormInput | FormData): FormData {
 		const values = Array.isArray(value) ? value : [value];
 		for (const item of values as FormValue[]) {
 			if (item === undefined || item === null) continue;
-			if (typeof Blob !== "undefined" && item instanceof Blob) form.append(key, item);
-			else form.append(key, String(item as string));
+			if (item instanceof Blob) form.append(key, item);
+			else form.append(key, String(item));
 		}
 	}
 	return form;
@@ -39,7 +39,8 @@ export function toUrlEncoded(input: FormInput | URLSearchParams): URLSearchParam
 		const values = Array.isArray(value) ? value : [value];
 		for (const item of values as FormValue[]) {
 			if (item === undefined || item === null) continue;
-			params.append(key, String(item as string));
+			if (item instanceof Blob) throw new TypeError(`"${key}" is a Blob; files need multipart(), not form()`);
+			params.append(key, String(item));
 		}
 	}
 	return params;

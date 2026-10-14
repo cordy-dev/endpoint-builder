@@ -35,7 +35,10 @@ describe("typed endpoint headers", () => {
 		type ListInput = EndpointInput<typeof contract.list>;
 		expectTypeOf<ListInput["headers"]>().toEqualTypeOf<{ "x-page-size"?: unknown } | undefined>();
 		const api = createApi(contract);
-		const compileOnly = () => { void api.list(); void api.list({ headers: { "x-page-size": 50 } }); };
+		const compileOnly = () => {
+			void api.list();
+			void api.list({ headers: { "x-page-size": 50 } });
+		};
 		void compileOnly;
 	});
 
@@ -43,7 +46,9 @@ describe("typed endpoint headers", () => {
 		type PlainInput = EndpointInput<typeof contract.plain>;
 		expectTypeOf<PlainInput["headers"]>().not.toBeAny();
 		const api = createApi(contract);
-		const compileOnly = () => { void api.plain({ headers: { "x-anything": "1" } }); };
+		const compileOnly = () => {
+			void api.plain({ headers: { "x-anything": "1" } });
+		};
 		void compileOnly;
 	});
 

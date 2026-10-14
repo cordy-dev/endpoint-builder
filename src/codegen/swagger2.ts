@@ -5,8 +5,20 @@ type Obj = Record<string, any>;
 const METHODS = ["get", "put", "post", "delete", "options", "head", "patch"] as const;
 const FORM_TYPES = ["application/x-www-form-urlencoded", "multipart/form-data"];
 const INLINE_KEYS = [
-	"type", "format", "enum", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength",
-	"pattern", "minItems", "maxItems", "uniqueItems", "multipleOf",
+	"type",
+	"format",
+	"enum",
+	"minimum",
+	"maximum",
+	"exclusiveMinimum",
+	"exclusiveMaximum",
+	"minLength",
+	"maxLength",
+	"pattern",
+	"minItems",
+	"maxItems",
+	"uniqueItems",
+	"multipleOf",
 ];
 
 function isObject(value: unknown): value is Obj {
@@ -23,9 +35,13 @@ function convertSchema(node: unknown): unknown {
 	const out: Obj = {};
 	for (const [key, value] of Object.entries(node)) {
 		switch (key) {
-			case "$ref": out.$ref = typeof value === "string" ? rewriteRef(value) : value; break;
+			case "$ref":
+				out.$ref = typeof value === "string" ? rewriteRef(value) : value;
+				break;
 			case "properties":
-				out.properties = isObject(value) ? Object.fromEntries(Object.entries(value).map(([name, child]) => [name, convertSchema(child)])) : value;
+				out.properties = isObject(value)
+					? Object.fromEntries(Object.entries(value).map(([name, child]) => [name, convertSchema(child)]))
+					: value;
 				break;
 			case "items":
 			case "additionalProperties":
@@ -37,10 +53,17 @@ function convertSchema(node: unknown): unknown {
 			case "oneOf":
 				out[key] = Array.isArray(value) ? value.map(convertSchema) : value;
 				break;
-			case "x-nullable": if (value === true) out.nullable = true; break;
-			case "discriminator": out.discriminator = typeof value === "string" ? { propertyName: value } : value; break;
-			case "example": case "x-example": break;
-			default: if (!key.startsWith("x-")) out[key] = value;
+			case "x-nullable":
+				if (value === true) out.nullable = true;
+				break;
+			case "discriminator":
+				out.discriminator = typeof value === "string" ? { propertyName: value } : value;
+				break;
+			case "example":
+			case "x-example":
+				break;
+			default:
+				if (!key.startsWith("x-")) out[key] = value;
 		}
 	}
 	if (out.type === "file") {
@@ -69,12 +92,18 @@ function collectionStyle(parameter: Obj, location: string, warnings: string[]): 
 	const format = parameter.collectionFormat ?? "csv";
 	const query = location === "query";
 	switch (format) {
-		case "csv": return query ? { style: "form", explode: false } : { style: "simple", explode: false };
-		case "multi": return { style: "form", explode: true };
-		case "ssv": return { style: "spaceDelimited", explode: false };
-		case "pipes": return { style: "pipeDelimited", explode: false };
+		case "csv":
+			return query ? { style: "form", explode: false } : { style: "simple", explode: false };
+		case "multi":
+			return { style: "form", explode: true };
+		case "ssv":
+			return { style: "spaceDelimited", explode: false };
+		case "pipes":
+			return { style: "pipeDelimited", explode: false };
 		default:
-			warnings.push(`Parameter "${parameter.name}" uses collectionFormat "${format}", which has no OpenAPI 3 equivalent; treated as csv`);
+			warnings.push(
+				`Parameter "${parameter.name}" uses collectionFormat "${format}", which has no OpenAPI 3 equivalent; treated as csv`,
+			);
 			return query ? { style: "form", explode: false } : { style: "simple", explode: false };
 	}
 }
@@ -119,7 +148,7 @@ export function swagger2ToOpenApi(doc: Obj, warnings: string[]): Obj {
 			if (!isObject(op)) continue;
 
 			const own: Obj[] = (op.parameters ?? []).map((p: unknown) => lookup("parameters", p));
-			const merged = [...pathParameters.filter(p => !own.some(q => q.in === p.in && q.name === p.name)), ...own];
+			const merged = [...pathParameters.filter((p) => !own.some((q) => q.in === p.in && q.name === p.name)), ...own];
 			const consumes: string[] = Array.isArray(op.consumes) ? op.consumes : globalConsumes;
 			const produces: string[] = Array.isArray(op.produces) ? op.produces : globalProduces;
 
@@ -135,7 +164,7 @@ export function swagger2ToOpenApi(doc: Obj, warnings: string[]): Obj {
 					result.requestBody = {
 						required: parameter.required === true,
 						description: parameter.description,
-						content: Object.fromEntries(media.map(type => [type, { schema: convertSchema(parameter.schema ?? {}) }])),
+						content: Object.fromEntries(media.map((type) => [type, { schema: convertSchema(parameter.schema ?? {}) }])),
 					};
 				} else if (parameter.in === "formData") {
 					formData.push(parameter);
@@ -153,15 +182,21 @@ export function swagger2ToOpenApi(doc: Obj, warnings: string[]): Obj {
 			}
 
 			if (formData.length > 0) {
-				const hasFile = formData.some(p => p.type === "file");
-				const declared = consumes.filter(type => FORM_TYPES.includes(type));
-				const media = declared.length > 0 ? declared : [hasFile ? "multipart/form-data" : "application/x-www-form-urlencoded"];
+				const hasFile = formData.some((p) => p.type === "file");
+				const declared = consumes.filter((type) => FORM_TYPES.includes(type));
+				const media =
+					declared.length > 0 ? declared : [hasFile ? "multipart/form-data" : "application/x-www-form-urlencoded"];
 				const schema = {
 					type: "object",
-					properties: Object.fromEntries(formData.map(p => [p.name, { ...inlineSchema(p), description: p.description }])),
-					required: formData.filter(p => p.required === true).map(p => p.name),
+					properties: Object.fromEntries(
+						formData.map((p) => [p.name, { ...inlineSchema(p), description: p.description }]),
+					),
+					required: formData.filter((p) => p.required === true).map((p) => p.name),
 				};
-				result.requestBody = { required: schema.required.length > 0, content: Object.fromEntries(media.map(type => [type, { schema }])) };
+				result.requestBody = {
+					required: schema.required.length > 0,
+					content: Object.fromEntries(media.map((type) => [type, { schema }])),
+				};
 			}
 
 			const responses: Obj = {};
@@ -169,14 +204,25 @@ export function swagger2ToOpenApi(doc: Obj, warnings: string[]): Obj {
 				if (status.startsWith("x-")) continue;
 				const response = lookup("responses", raw);
 				const headers = isObject(response.headers)
-					? Object.fromEntries(Object.entries<Obj>(response.headers).map(([name, header]) => [name, { description: header.description, schema: inlineSchema(header) }]))
+					? Object.fromEntries(
+							Object.entries<Obj>(response.headers).map(([name, header]) => [
+								name,
+								{ description: header.description, schema: inlineSchema(header) },
+							]),
+						)
 					: undefined;
 				responses[status] = {
 					description: response.description ?? "",
 					headers,
-					content: response.schema === undefined
-						? undefined
-						: Object.fromEntries((produces.length > 0 ? produces : ["application/json"]).map(type => [type, { schema: convertSchema(response.schema) }])),
+					content:
+						response.schema === undefined
+							? undefined
+							: Object.fromEntries(
+									(produces.length > 0 ? produces : ["application/json"]).map((type) => [
+										type,
+										{ schema: convertSchema(response.schema) },
+									]),
+								),
 				};
 			}
 			result.responses = responses;

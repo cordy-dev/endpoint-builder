@@ -9,14 +9,16 @@ Guidance for AI coding agents (and humans) working **on this repository**. If yo
 ## Commands
 
 ```bash
-npm test            # vitest, includes type-level tests (expectTypeOf, @ts-expect-error)
-npm run typecheck   # tsc --noEmit, covers src and tests
-npm run lint        # eslint (tabs, double quotes, sorted imports); `npm run lint:fix` fixes most things
-npm run build       # tsdown -> dist/ (index, auth, retry, errors, testing)
-npm run docs:llms   # regenerate llms-full.txt after editing README.md or MIGRATION.md
+bun install --frozen-lockfile  # bun is the package manager (bun.lock)
+bun run test         # vitest, includes type-level tests (expectTypeOf, @ts-expect-error). Not `bun test`: that is bun's own runner
+bun run check        # tsc --noEmit, covers src and tests (also `bun check`)
+bun run lint         # oxlint, type-aware (needs oxlint-tsgolint); `bun run lint:fix` fixes most things
+bun run format       # oxfmt (reads .editorconfig and .oxfmtrc.json); `bun run format:check` only checks
+bun run build        # tsdown -> dist/ (index, auth, retry, errors, testing)
+bun run docs:llms    # regenerate llms-full.txt after editing README.md or MIGRATION.md
 ```
 
-Run test, typecheck and lint before every commit. A test checks that `llms-full.txt` is up to date.
+Run test, check, lint and format:check before every commit (the pre-commit hook formats and lints staged files). A test checks that `llms-full.txt` is up to date.
 
 ## Map of the code
 
@@ -42,7 +44,7 @@ Request pipeline, outermost first: `hooks -> dedupe -> user middleware -> retry 
 - **No runtime dependencies.** Anything new must be implemented here. `zod`, `valibot` and `arktype` are dev dependencies for tests only.
 - **Errors.** Every error extends `EndpointError` and has a literal `type`. A new error type must be added to `ErrorType`, to the `ApiError` union, to `src/index.ts` and to the README table.
 - **Secrets never reach error text.** Build an error's request with `errorRequest(ctx)` from `src/utils/url.ts`, never `{ method, url: ctx.url }`. Query params that look like credentials are masked there.
-- **Style.** Tabs, double quotes, semicolons, sorted imports. `npm run lint:fix` does the formatting.
+- **Style.** Tabs, double quotes, semicolons, sorted imports. `bun run format` does the formatting and `bun run lint:fix` the safe lint fixes.
 - **Types are part of the API.** A change that affects inference needs a type test (`expectTypeOf`), and a negative case with `// @ts-expect-error` when the point is to reject something.
 - **Hot path.** Middleware that usually has nothing to do should be a plain function that returns `next(ctx)` synchronously, not an `async` function, so ordinary requests pay no extra promise.
 
@@ -52,7 +54,7 @@ Request pipeline, outermost first: `hooks -> dedupe -> user middleware -> retry 
 2. Tests in `tests/`: runtime behaviour, types, and the failure cases.
 3. Export it from `src/index.ts` (and a subpath entry only if it is a separate concern).
 4. Update `README.md`, `CHANGELOG.md`, and `MIGRATION.md` if it changes 1.x behaviour.
-5. `npm run docs:llms`, then add a rule to `llms.txt` if users are likely to get it wrong.
+5. `bun run docs:llms`, then add a rule to `llms.txt` if users are likely to get it wrong.
 
 ## Testing notes (learned the hard way)
 
