@@ -10,7 +10,6 @@ import {
 	type RequestBodyModel,
 	type ResponseModel,
 	SpecError,
-	type WebhookModel,
 } from "./model";
 import { swagger2ToOpenApi } from "./swagger2";
 
@@ -44,7 +43,9 @@ function warn(ctx: Context, message: string): void {
 
 function resolvePointer(ctx: Context, ref: string): unknown {
 	if (!ref.startsWith("#/")) {
-		throw new SpecError(`External reference "${ref}" is not supported. Bundle the specification into one file first (for example with \`redocly bundle\`).`);
+		throw new SpecError(
+			`External reference "${ref}" is not supported. Bundle the specification into one file first (for example with \`redocly bundle\`).`,
+		);
 	}
 	let current: unknown = ctx.doc;
 	for (const segment of ref.slice(2).split("/")) {
@@ -89,7 +90,9 @@ function normalizeSchema(ctx: Context, node: unknown, stack: readonly string[] =
 		}
 		// a pointer into the middle of a document: inline what it points to
 		if (stack.includes(node.$ref)) {
-			throw new SpecError(`The reference "${node.$ref}" is recursive but does not point to a named schema in components.schemas, so it cannot be generated`);
+			throw new SpecError(
+				`The reference "${node.$ref}" is recursive but does not point to a named schema in components.schemas, so it cannot be generated`,
+			);
 		}
 		return normalizeSchema(ctx, resolvePointer(ctx, node.$ref), [...stack, node.$ref]);
 	}
@@ -99,17 +102,30 @@ function normalizeSchema(ctx: Context, node: unknown, stack: readonly string[] =
 
 	if (typeof node.type === "string" && JSON_TYPES.includes(node.type)) out.type = node.type as JsonType;
 	else if (Array.isArray(node.type)) {
-		const types = node.type.filter((type: unknown) => typeof type === "string" && JSON_TYPES.includes(type)) as JsonType[];
+		const types = node.type.filter(
+			(type: unknown) => typeof type === "string" && JSON_TYPES.includes(type),
+		) as JsonType[];
 		if (types.length > 0) out.type = types.length === 1 ? types[0]! : types;
 	}
 	if (Array.isArray(node.enum)) out.enum = [...node.enum];
 	if ("const" in node) out.const = node.const;
 	if (typeof node.format === "string") out.format = node.format;
 	// 3.1 describes binary data with contentMediaType instead of `format: binary`
-	if (out.type === "string" && typeof node.contentMediaType === "string" && node.contentEncoding === undefined) out.format = "binary";
+	if (out.type === "string" && typeof node.contentMediaType === "string" && node.contentEncoding === undefined)
+		out.format = "binary";
 	if (out.type === "string" && node.contentEncoding === "base64") out.format = "byte";
 
-	for (const key of ["minLength", "maxLength", "minItems", "maxItems", "minProperties", "maxProperties", "multipleOf", "minimum", "maximum"] as const) {
+	for (const key of [
+		"minLength",
+		"maxLength",
+		"minItems",
+		"maxItems",
+		"minProperties",
+		"maxProperties",
+		"multipleOf",
+		"minimum",
+		"maximum",
+	] as const) {
 		if (typeof node[key] === "number") out[key] = node[key];
 	}
 	if (typeof node.pattern === "string") out.pattern = node.pattern;
@@ -122,7 +138,10 @@ function normalizeSchema(ctx: Context, node: unknown, stack: readonly string[] =
 	}
 
 	// exclusiveMinimum/Maximum: boolean modifiers in 3.0, numbers in 3.1
-	for (const [exclusive, bound] of [["exclusiveMinimum", "minimum"], ["exclusiveMaximum", "maximum"]] as const) {
+	for (const [exclusive, bound] of [
+		["exclusiveMinimum", "minimum"],
+		["exclusiveMaximum", "maximum"],
+	] as const) {
 		if (typeof node[exclusive] === "number") out[exclusive] = node[exclusive];
 		else if (node[exclusive] === true && typeof node[bound] === "number") {
 			out[exclusive] = node[bound];
@@ -132,7 +151,9 @@ function normalizeSchema(ctx: Context, node: unknown, stack: readonly string[] =
 
 	if (Array.isArray(node.required)) out.required = node.required.filter((name: unknown) => typeof name === "string");
 	if (isObject(node.properties)) {
-		out.properties = Object.fromEntries(Object.entries(node.properties).map(([name, child]) => [name, next(child)])) as Record<string, JsonSchema>;
+		out.properties = Object.fromEntries(
+			Object.entries(node.properties).map(([name, child]) => [name, next(child)]),
+		) as Record<string, JsonSchema>;
 	}
 	if (typeof node.additionalProperties === "boolean" || isObject(node.additionalProperties)) {
 		out.additionalProperties = next(node.additionalProperties);
@@ -201,7 +222,10 @@ function parseParameter(ctx: Context, node: unknown, location?: ParameterLocatio
 	else if (isObject(parameter.content)) {
 		const [first] = Object.values(parameter.content);
 		if (isObject(first) && first.schema !== undefined) schema = normalizeSchema(ctx, first.schema);
-		warn(ctx, `Parameter "${parameter.name}" is defined with \`content\`; it is typed from its schema but sent as plain text`);
+		warn(
+			ctx,
+			`Parameter "${parameter.name}" is defined with \`content\`; it is typed from its schema but sent as plain text`,
+		);
 	}
 
 	const model: ParameterModel = {
@@ -219,7 +243,7 @@ function parseParameter(ctx: Context, node: unknown, location?: ParameterLocatio
 
 function parseParameters(ctx: Context, list: unknown): ParameterModel[] {
 	if (!Array.isArray(list)) return [];
-	return list.map(item => parseParameter(ctx, item)).filter((p): p is ParameterModel => p !== undefined);
+	return list.map((item) => parseParameter(ctx, item)).filter((p): p is ParameterModel => p !== undefined);
 }
 
 function parseRequestBody(ctx: Context, node: unknown): RequestBodyModel | undefined {
@@ -253,7 +277,7 @@ function parseResponses(ctx: Context, node: unknown): ResponseModel[] {
 
 function parseMessage(ctx: Context, node: Obj, inherited: ParameterModel[]): MessageModel {
 	const own = parseParameters(ctx, node.parameters);
-	const parameters = [...inherited.filter(p => !own.some(q => q.in === p.in && q.name === p.name)), ...own];
+	const parameters = [...inherited.filter((p) => !own.some((q) => q.in === p.in && q.name === p.name)), ...own];
 	const message: MessageModel = {
 		deprecated: node.deprecated === true,
 		tags: Array.isArray(node.tags) ? node.tags.filter((tag: unknown): tag is string => typeof tag === "string") : [],
@@ -267,36 +291,6 @@ function parseMessage(ctx: Context, node: Obj, inherited: ParameterModel[]): Mes
 	return message;
 }
 
-// ------------------------------------------------------ callbacks, webhooks
-
-/** Flatten `{ expression: PathItem }` (callbacks) or a single PathItem (webhooks) into webhook models */
-function parsePathItemAsWebhooks(ctx: Context, name: string, expression: string | undefined, rawItem: unknown, operationId?: string): WebhookModel[] {
-	const item = deref(ctx, rawItem);
-	const inherited = parseParameters(ctx, item.parameters);
-	const out: WebhookModel[] = [];
-	for (const method of METHODS) {
-		if (!isObject(item[method])) continue;
-		const webhook: WebhookModel = { ...parseMessage(ctx, item[method], inherited), name, method: method.toUpperCase() as HttpMethod };
-		if (expression !== undefined) webhook.expression = expression;
-		if (operationId !== undefined) webhook.operationId = operationId;
-		out.push(webhook);
-	}
-	return out;
-}
-
-function parseCallbacks(ctx: Context, node: unknown, operationId?: string): WebhookModel[] {
-	if (!isObject(node)) return [];
-	const out: WebhookModel[] = [];
-	for (const [name, rawCallback] of Object.entries(node)) {
-		const callback = deref(ctx, rawCallback);
-		for (const [expression, item] of Object.entries(callback)) {
-			if (expression.startsWith("x-")) continue;
-			out.push(...parsePathItemAsWebhooks(ctx, name, expression, item, operationId));
-		}
-	}
-	return out;
-}
-
 // -------------------------------------------------------------- the document
 
 function parseServers(ctx: Context): string[] {
@@ -304,10 +298,12 @@ function parseServers(ctx: Context): string[] {
 	if (!Array.isArray(servers)) return [];
 	return servers
 		.filter((server): server is Obj => isObject(server) && typeof server.url === "string")
-		.map(server => (server.url as string).replace(/\{([^}]+)\}/g, (match, name: string) => {
-			const fallback = server.variables?.[name]?.default;
-			return typeof fallback === "string" ? fallback : match;
-		}));
+		.map((server) =>
+			(server.url as string).replace(/\{([^}]+)\}/g, (match, name: string) => {
+				const fallback = server.variables?.[name]?.default;
+				return typeof fallback === "string" ? fallback : match;
+			}),
+		);
 }
 
 /**
@@ -324,12 +320,13 @@ export function parseSpec(input: unknown): NormalizedSpec {
 	let version: NormalizedSpec["version"];
 	let doc: Obj;
 	if (input.swagger !== undefined) {
-		if (String(input.swagger) !== "2.0") throw new SpecError(`Unsupported Swagger version "${String(input.swagger)}" (only 2.0)`);
+		if (String(input.swagger) !== "2.0")
+			throw new SpecError(`Unsupported Swagger version "${String(input.swagger)}" (only 2.0)`);
 		version = "2.0";
 		doc = swagger2ToOpenApi(input, warnings);
 	} else if (typeof input.openapi === "string") {
-		if (/^3\.0\./.test(input.openapi)) version = "3.0";
-		else if (/^3\.1\./.test(input.openapi)) version = "3.1";
+		if (input.openapi.startsWith("3.0.")) version = "3.0";
+		else if (input.openapi.startsWith("3.1.")) version = "3.1";
 		else throw new SpecError(`Unsupported OpenAPI version "${input.openapi}" (supported: 2.0, 3.0.x, 3.1.x)`);
 		doc = input;
 	} else {
@@ -356,27 +353,32 @@ export function parseSpec(input: unknown): NormalizedSpec {
 				...parseMessage(ctx, op, inherited),
 				method: method.toUpperCase() as HttpMethod,
 				path,
-				callbacks: [],
 			};
 			if (typeof op.operationId === "string") operation.operationId = op.operationId;
-			operation.callbacks = parseCallbacks(ctx, op.callbacks, operation.operationId);
+			if (isObject(op.callbacks) && Object.keys(op.callbacks).length > 0) {
+				warn(
+					ctx,
+					`Callbacks of ${operation.operationId ?? `${operation.method} ${path}`} are ignored: they describe requests the server sends to you, which a client cannot make`,
+				);
+			}
 			operations.push(operation);
 		}
 	}
 
-	const webhooks: WebhookModel[] = [];
-	if (isObject(doc.webhooks)) {
-		for (const [name, item] of Object.entries(doc.webhooks)) webhooks.push(...parsePathItemAsWebhooks(ctx, name, undefined, item));
+	if (isObject(doc.webhooks) && Object.keys(doc.webhooks).length > 0) {
+		warn(ctx, "Webhooks are ignored: they describe requests the server sends to you, which a client cannot make");
 	}
 
 	const info = isObject(doc.info) ? doc.info : {};
 	const spec: NormalizedSpec = {
 		version,
-		info: { title: typeof info.title === "string" ? info.title : "API", version: typeof info.version === "string" ? info.version : "0" },
+		info: {
+			title: typeof info.title === "string" ? info.title : "API",
+			version: typeof info.version === "string" ? info.version : "0",
+		},
 		servers: parseServers(ctx),
 		schemas,
 		operations,
-		webhooks,
 		warnings,
 	};
 	if (typeof info.description === "string") spec.info.description = info.description;

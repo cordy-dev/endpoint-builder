@@ -39,7 +39,16 @@ function indentOf(level: number): string {
 	return "\t".repeat(level);
 }
 
-/** `/** ... *\/` block for a schema's description, `@deprecated` and `@format`. Empty when there is nothing to say. */
+/** `/** ... *\/` block for the given lines. Empty when there is nothing to say. */
+export function docComment(lines: readonly string[], level = 0): string {
+	if (lines.length === 0) return "";
+	const pad = indentOf(level);
+	const clean = lines.map((line) => line.replace(/\*\//g, "*\\/").trimEnd());
+	if (clean.length === 1 && !clean[0]!.startsWith("@")) return `${pad}/** ${clean[0]} */\n`;
+	return `${pad}/**\n${clean.map((line) => `${pad} * ${line}`.trimEnd()).join("\n")}\n${pad} */\n`;
+}
+
+/** Doc comment for a schema's description, `@deprecated` and `@format`. Empty when there is nothing to say. */
 export function jsDoc(schema: JsonSchema | boolean, level = 0, extra: readonly string[] = []): string {
 	if (typeof schema === "boolean") return "";
 	const lines: string[] = [];
@@ -48,11 +57,7 @@ export function jsDoc(schema: JsonSchema | boolean, level = 0, extra: readonly s
 	lines.push(...extra);
 	if (schema.format && schema.format !== "binary") lines.push(`@format ${schema.format}`);
 	if (schema.deprecated) lines.push("@deprecated");
-	if (lines.length === 0) return "";
-	const pad = indentOf(level);
-	const clean = lines.map((line) => line.replace(/\*\//g, "*\\/").trimEnd());
-	if (clean.length === 1 && !clean[0]!.startsWith("@")) return `${pad}/** ${clean[0]} */\n`;
-	return `${pad}/**\n${clean.map((line) => `${pad} * ${line}`.trimEnd()).join("\n")}\n${pad} */\n`;
+	return docComment(lines, level);
 }
 
 function objectType(schema: JsonSchema, ctx: TypeContext, level: number): Code {

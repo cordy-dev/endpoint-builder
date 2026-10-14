@@ -47,6 +47,16 @@
       "import": "./dist/testing.js",
       "default": "./dist/testing.js"
     },
+    "./openapi": {
+      "types": "./dist/openapi.d.ts",
+      "import": "./dist/openapi.js",
+      "default": "./dist/openapi.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen.d.ts",
+      "import": "./dist/codegen.js",
+      "default": "./dist/codegen.js"
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
@@ -108,5 +118,8 @@
     "type-safe",
     "retry"
   ],
-  "packageManager": "bun@1.4.2"
+  "packageManager": "bun@1.4.2",
+  "bin": {
+    "endpoint-builder": "./dist/cli.js"
+  }
 }

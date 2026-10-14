@@ -13,6 +13,7 @@
     "tests/fixtures/**",
     "bun.lock",
     "llms-full.txt",
-    "**/*.md"
+    "**/*.md",
+    "tests/generated/**"
   ]
 }

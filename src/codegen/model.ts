@@ -39,7 +39,7 @@ export interface ResponseModel {
 	headers: ParameterModel[];
 }
 
-/** Request/response shape shared by operations, callbacks and webhooks */
+/** What an operation takes and returns */
 export interface MessageModel {
 	summary?: string;
 	description?: string;
@@ -55,17 +55,6 @@ export interface OperationModel extends MessageModel {
 	operationId?: string;
 	method: HttpMethod;
 	path: string;
-	callbacks: WebhookModel[];
-}
-
-/** A request that the *server* sends to you: an operation callback or an OpenAPI 3.1 webhook */
-export interface WebhookModel extends MessageModel {
-	name: string;
-	/** Runtime expression that tells where the callback goes, e.g. `{$request.body#/callbackUrl}` (callbacks only) */
-	expression?: string;
-	method: HttpMethod;
-	/** `operationId` of the owning operation (callbacks only) */
-	operationId?: string;
 }
 
 export interface NormalizedSpec {
@@ -77,7 +66,6 @@ export interface NormalizedSpec {
 	/** `components.schemas` (or `definitions`), normalized; refs look like `#/$defs/Name` */
 	schemas: { [name: string]: JsonSchema | boolean };
 	operations: OperationModel[];
-	webhooks: WebhookModel[];
 	/** Things that were skipped or approximated */
 	warnings: string[];
 }

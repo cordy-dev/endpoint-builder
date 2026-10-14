@@ -85,19 +85,37 @@ function describe(value: unknown): string {
 	return typeof value;
 }
 
+/** Data that can stand for a `string` + `format: binary` value: files and blobs in bodies, or text */
+export function isBinaryLike(value: unknown): boolean {
+	return (
+		typeof value === "string" ||
+		(typeof Blob !== "undefined" && value instanceof Blob) ||
+		value instanceof ArrayBuffer ||
+		ArrayBuffer.isView(value) ||
+		(typeof ReadableStream !== "undefined" && value instanceof ReadableStream)
+	);
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function matchesType(type: JsonType, value: unknown): boolean {
 	switch (type) {
-		case "string": return typeof value === "string";
-		case "number": return typeof value === "number" && Number.isFinite(value);
-		case "integer": return typeof value === "number" && Number.isInteger(value);
-		case "boolean": return typeof value === "boolean";
-		case "null": return value === null;
-		case "object": return isPlainObject(value);
-		case "array": return Array.isArray(value);
+		case "string":
+			return typeof value === "string";
+		case "number":
+			return typeof value === "number" && Number.isFinite(value);
+		case "integer":
+			return typeof value === "number" && Number.isInteger(value);
+		case "boolean":
+			return typeof value === "boolean";
+		case "null":
+			return value === null;
+		case "object":
+			return isPlainObject(value);
+		case "array":
+			return Array.isArray(value);
 	}
 }
 
@@ -107,7 +125,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
 	if (isPlainObject(a)) {
 		if (!isPlainObject(b)) return false;
 		const keys = Object.keys(a);
-		return keys.length === Object.keys(b).length && keys.every(key => key in b && deepEqual(a[key], b[key]));
+		return keys.length === Object.keys(b).length && keys.every((key) => key in b && deepEqual(a[key], b[key]));
 	}
 	return false;
 }
@@ -132,14 +150,23 @@ function compileRegex(source: string): RegExp | undefined {
 
 function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check): Check {
 	if (schema === true) return () => undefined;
-	if (schema === false) return (_value, path, issues) => { issues.push({ message: "No value is allowed here", path }); };
+	if (schema === false)
+		return (_value, path, issues) => {
+			issues.push({ message: "No value is allowed here", path });
+		};
 
 	const checks: Check[] = [];
-	const types = schema.type === undefined ? undefined : Array.isArray(schema.type) ? [...schema.type] as JsonType[] : [schema.type as JsonType];
+	const types =
+		schema.type === undefined
+			? undefined
+			: Array.isArray(schema.type)
+				? ([...schema.type] as JsonType[])
+				: [schema.type as JsonType];
 	if (schema.nullable && types && !types.includes("null")) types.push("null");
 
 	if (schema.$ref !== undefined) {
-		if (!schema.$ref.startsWith(REF_PREFIX)) throw new TypeError(`Unsupported $ref "${schema.$ref}"; use "#/$defs/Name"`);
+		if (!schema.$ref.startsWith(REF_PREFIX))
+			throw new TypeError(`Unsupported $ref "${schema.$ref}"; use "#/$defs/Name"`);
 		const name = schema.$ref.slice(REF_PREFIX.length);
 		checks.push((value, path, issues) => getDef(name)(value, path, issues));
 	}
@@ -147,8 +174,8 @@ function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check):
 	if (schema.enum) {
 		const allowed = schema.enum;
 		checks.push((value, path, issues) => {
-			if (!allowed.some(item => deepEqual(item, value))) {
-				issues.push({ message: `Expected one of ${allowed.map(item => JSON.stringify(item)).join(", ")}`, path });
+			if (!allowed.some((item) => deepEqual(item, value))) {
+				issues.push({ message: `Expected one of ${allowed.map((item) => JSON.stringify(item)).join(", ")}`, path });
 			}
 		});
 	}
@@ -184,7 +211,11 @@ function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check):
 	}
 
 	const numberChecks: Check[] = [];
-	const bound = (keyword: "minimum" | "maximum" | "exclusiveMinimum" | "exclusiveMaximum", fails: (v: number, limit: number) => boolean, text: string) => {
+	const bound = (
+		keyword: "minimum" | "maximum" | "exclusiveMinimum" | "exclusiveMaximum",
+		fails: (v: number, limit: number) => boolean,
+		text: string,
+	) => {
 		const limit = schema[keyword];
 		if (limit === undefined) return;
 		numberChecks.push((value, path, issues) => {
@@ -220,14 +251,14 @@ function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check):
 		arrayChecks.push((value, path, issues) => {
 			const items = value as unknown[];
 			for (let i = 1; i < items.length; i++) {
-				if (items.slice(0, i).some(previous => deepEqual(previous, items[i]))) {
+				if (items.slice(0, i).some((previous) => deepEqual(previous, items[i]))) {
 					issues.push({ message: "Items must be unique", path: [...path, i] });
 					return;
 				}
 			}
 		});
 	}
-	const prefix = schema.prefixItems?.map(item => compile(item, getDef));
+	const prefix = schema.prefixItems?.map((item) => compile(item, getDef));
 	const rest = schema.items === undefined ? undefined : compile(schema.items, getDef);
 	if (prefix || rest) {
 		arrayChecks.push((value, path, issues) => {
@@ -252,21 +283,28 @@ function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check):
 	if (schema.minProperties !== undefined) {
 		const min = schema.minProperties;
 		objectChecks.push((value, path, issues) => {
-			if (Object.keys(value as object).length < min) issues.push({ message: `Must have at least ${min} properties`, path });
+			if (Object.keys(value as object).length < min)
+				issues.push({ message: `Must have at least ${min} properties`, path });
 		});
 	}
 	if (schema.maxProperties !== undefined) {
 		const max = schema.maxProperties;
 		objectChecks.push((value, path, issues) => {
-			if (Object.keys(value as object).length > max) issues.push({ message: `Must have at most ${max} properties`, path });
+			if (Object.keys(value as object).length > max)
+				issues.push({ message: `Must have at most ${max} properties`, path });
 		});
 	}
-	const properties = schema.properties ? Object.entries(schema.properties).map(([name, child]) => [name, compile(child, getDef)] as const) : [];
-	const extra: Check | undefined = schema.additionalProperties === undefined || schema.additionalProperties === true
-		? undefined
-		: schema.additionalProperties === false
-			? (_value, path, issues) => { issues.push({ message: "Unexpected property", path }); }
-			: compile(schema.additionalProperties, getDef);
+	const properties = schema.properties
+		? Object.entries(schema.properties).map(([name, child]) => [name, compile(child, getDef)] as const)
+		: [];
+	const extra: Check | undefined =
+		schema.additionalProperties === undefined || schema.additionalProperties === true
+			? undefined
+			: schema.additionalProperties === false
+				? (_value, path, issues) => {
+						issues.push({ message: "Unexpected property", path });
+					}
+				: compile(schema.additionalProperties, getDef);
 	if (properties.length > 0 || extra) {
 		const known = new Set(properties.map(([name]) => name));
 		objectChecks.push((value, path, issues) => {
@@ -291,7 +329,7 @@ function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check):
 	if (stringChecks.length + numberChecks.length + arrayChecks.length + objectChecks.length > 0) checks.push(kindChecks);
 
 	if (schema.allOf?.length) {
-		const members = schema.allOf.map(member => compile(member, getDef));
+		const members = schema.allOf.map((member) => compile(member, getDef));
 		checks.push((value, path, issues) => {
 			for (const member of members) member(value, path, issues);
 		});
@@ -300,7 +338,7 @@ function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check):
 	// response because two branches match would be worse than accepting it.
 	for (const alternatives of [schema.anyOf, schema.oneOf]) {
 		if (!alternatives?.length) continue;
-		const branches = alternatives.map(branch => compile(branch, getDef));
+		const branches = alternatives.map((branch) => compile(branch, getDef));
 		checks.push((value, path, issues) => {
 			let closest: Issue[] | undefined;
 			for (const branch of branches) {
@@ -331,9 +369,11 @@ function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check):
 	if (!types) return checks.length === 0 ? () => undefined : run;
 
 	// the type is a gate: on a mismatch report that one issue instead of a cascade of follow-ups
-	const expected = types.join(" | ");
+	// `string` + `format: binary` is data (a Blob, bytes, a stream), not just text
+	const binary = schema.format === "binary";
+	const expected = types.map((type) => (type === "string" && binary ? "binary data" : type)).join(" | ");
 	return (value, path, issues) => {
-		if (!types.some(type => matchesType(type, value))) {
+		if (!types.some((type) => (type === "string" && binary ? isBinaryLike(value) : matchesType(type, value)))) {
 			issues.push({ message: `Expected ${expected}, received ${describe(value)}`, path });
 			return;
 		}
@@ -358,7 +398,10 @@ function compile(schema: JsonSchema | boolean, getDef: (name: string) => Check):
  * api.get("/users/:id").returns(User);
  * ```
  */
-export function jsonSchema<T = unknown>(schema: JsonSchema | boolean, defs: JsonSchemaDefs = {}): StandardSchemaV1<T, T> {
+export function jsonSchema<T = unknown>(
+	schema: JsonSchema | boolean,
+	defs: JsonSchemaDefs = {},
+): StandardSchemaV1<T, T> {
 	const compiled = new Map<string, Check>();
 	const getDef = (name: string): Check => {
 		let check = compiled.get(name);

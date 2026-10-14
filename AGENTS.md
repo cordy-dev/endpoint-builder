@@ -34,6 +34,8 @@ Run test, check, lint and format:check before every commit (the pre-commit hook 
 | `src/schema/` | Standard Schema types, `validate`, `schema(fn)` |
 | `src/errors/`, `src/result.ts` | Error classes (all extend `EndpointError` and have a `type`), `Result` |
 | `src/testing/` | `mockClient` and `mockFetch` (published as `/testing`) |
+| `src/openapi/` | Runtime for generated clients: `jsonSchema` (JSON Schema validator), `xmlBody`/`xmlResponse`, `optional`, `queryStyle`, `unchecked`. Published as `/openapi` |
+| `src/codegen/` | OpenAPI/Swagger to TypeScript: `spec.ts` + `swagger2.ts` normalize a document, `types.ts` writes types, `generate.ts` writes the client file, `cli.ts`/`bin.ts` are the `endpoint-builder` command. Node only, published as `/codegen` |
 | `src/utils/` | path, query, body, headers, url (incl. redaction), decode, bounded reads |
 
 Request pipeline, outermost first: `hooks -> dedupe -> user middleware -> retry -> auth -> limit -> fetch`.
@@ -47,6 +49,10 @@ Request pipeline, outermost first: `hooks -> dedupe -> user middleware -> retry 
 - **Style.** Tabs, double quotes, semicolons, sorted imports. `bun run format` does the formatting and `bun run lint:fix` the safe lint fixes.
 - **Types are part of the API.** A change that affects inference needs a type test (`expectTypeOf`), and a negative case with `// @ts-expect-error` when the point is to reject something.
 - **Hot path.** Middleware that usually has nothing to do should be a plain function that returns `next(ctx)` synchronously, not an `async` function, so ordinary requests pay no extra promise.
+
+## Generated clients (tests/generated)
+
+`tests/generated/*.ts` are committed outputs of the generator for the documents in `tests/fixtures/`. They are type-checked with the other tests and used by `tests/codegen-generate.test.ts`, which also fails when the generator no longer produces them. After changing the generator run `UPDATE_GOLDEN=1 bun run test`, read the diff, and commit it. oxfmt and oxlint skip that folder.
 
 ## Adding a feature
 

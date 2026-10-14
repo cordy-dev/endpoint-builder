@@ -24,7 +24,11 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "esModuleInterop": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "paths": {
+      "@cordy/endpoint-builder": ["./src/index.ts"],
+      "@cordy/endpoint-builder/*": ["./src/*/index.ts"]
+    }
   },
   "include": ["src", "tests", "scripts", "tsdown.config.ts", "vitest.config.ts"]
 }

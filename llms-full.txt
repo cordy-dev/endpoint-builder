@@ -223,6 +223,63 @@ await api.me();                                    // ❌ compile error
 
 Headers become optional when every field is optional or has a default. Without `.headers(schema)`, `headers` accepts any extra headers.
 
+## Generate a client from OpenAPI
+
+Point the generator at an OpenAPI 3.0 / 3.1 or Swagger 2.0 document (JSON, from Swagger UI, Scalar, `/openapi.json`, ...) and it writes one TypeScript file with the types, validators and a typed contract:
+
+```bash
+npx endpoint-builder generate ./openapi.json --out src/api.ts
+npx endpoint-builder generate https://api.example.com/openapi.json --out src/api.ts
+```
+
+```ts
+import { bearer } from "@cordy/endpoint-builder/auth";
+import { createApi } from "./api"; // the generated file
+
+const api = createApi({ auth: bearer(() => token) }); // `baseUrl` defaults to the first server of the document
+
+const pets = await api.pets.listPets({ query: { limit: 10 }, headers: { "X-Tenant": "acme" } }); // Pet[], validated
+const pet = await api.pets.getPet({ params: { petId: 7 } }).safe(); // 404 body typed from the document
+await api.pets.getPet({ params: { petId: "7" } });                  // ❌ compile error: petId is a number
+```
+
+`createApi(options)` takes the same options as `createClient`. The generated file also exports `contract` (use it with `createApi(contract, options)` from the library, for example in tests with `mockClient`), `servers`, and a type and a validator for every component schema:
+
+```ts
+import { Pet, type NewPet } from "./api";
+
+Pet["~standard"].validate(value); // every export is a Standard Schema, so it works with .body(), .returns(), ...
+```
+
+| Option | Effect |
+|---|---|
+| `-o, --out <file>` | Write the client to this file. Without it the code is printed. |
+| `--check` | Do not write; exit with code 1 when `--out` is missing or out of date. Put it in CI so the file never drifts from the document. |
+| `--group tag` (default) / `--group none` | `api.pets.listPets` (grouped by the first tag; untagged operations stay at the top) or `api.listPets`. |
+| `--prefer json` (default) / `--prefer xml` | Which format to use when an operation offers both. |
+| `--no-validate` | Types only: nothing is validated at runtime and the file is smaller. |
+| `--import-from <module>` | Where the generated file imports the library from. |
+
+How the document maps to calls:
+
+| In the document | In the client |
+|---|---|
+| `operationId` | the method name, camel-cased (`get_user-by_id` → `getUserById`); without it, built from the method and path |
+| path, query and header parameters | typed `params`, `query` and `headers` inputs; required ones are required |
+| `style: form, explode: false`, `pipeDelimited`, `spaceDelimited` (and Swagger `collectionFormat`) | arrays joined with `,`, `\|` or a space |
+| `application/json`, `x-www-form-urlencoded`, `multipart/form-data` bodies | `body`, sent in that format. `format: binary` is a `Blob` |
+| `application/xml` | read and written with the schema's `xml` hints (`name`, `attribute`, `wrapped`, `prefix`/`namespace`) |
+| `text/event-stream`, `application/x-ndjson` | `.sse(Schema)` / `.ndjson(Schema)` streams |
+| `text/*` and binary responses | `string` and `Blob` |
+| `2xx` responses | the return type (several different ones become a union); no content is `void` |
+| `4xx` / `5xx` responses with JSON | `.errors({ 404: Problem })`, so `isHttpError(error, 404)` narrows the body |
+| `servers` | the `servers` export and the default `baseUrl` |
+| `summary`, `description`, `deprecated` | the JSDoc of the method |
+
+What it does not do, and tells you about on stderr: callbacks and webhooks (they describe requests the server makes to you), cookie parameters, `$ref`s to other files (bundle the document first), `default` and `4XX` response ranges, YAML (convert it to JSON first). Security schemes are not applied: pass `auth` yourself. Check the output into your repository and review the diff when the API changes.
+
+Validation follows JSON Schema without surprises: no type coercion, unknown properties are allowed, `format` is documentation only, and `oneOf` accepts a value that matches at least one branch. The same validator is available for hand-written schemas as `jsonSchema<T>(schema, defs)` from `@cordy/endpoint-builder/openapi`, next to `optional()`, `queryStyle()`, `unchecked<T>()`, `xmlBody()` and `xmlResponse()`, which the generated file uses. The generator itself is `generate(document, options)` from `@cordy/endpoint-builder/codegen` (Node only).
+
 ## Streaming (SSE and NDJSON)
 
 `.sse()` and `.ndjson()` resolve, after the status check, with an `EventStream`: an async iterable of validated items.

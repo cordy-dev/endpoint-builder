@@ -36,5 +36,5 @@
       }
     }
   ],
-  "ignorePatterns": ["dist/**", "coverage/**", "tests/fixtures/**", "llms-full.txt"]
+  "ignorePatterns": ["dist/**", "coverage/**", "tests/fixtures/**", "tests/generated/**", "llms-full.txt"]
 }

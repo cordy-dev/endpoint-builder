@@ -18,6 +18,7 @@
 - Auth: `bearer`, `apiKey`, `basic`, `refreshable`. Pass tokens as getters, `bearer(() => store.token)`, instead of rebuilding the client. `refreshable` shares one refresh between concurrent 401s.
 - Observe with hooks (`onRequest`, `onResponse`, `onSuccess`, `onError`, `onRetry`) on the client or on one request. Wrap calls (timing, caching) with `middleware`. Register `onSuccess` after `returns()` / `map()` so the data has its final type.
 - Protect unattended callers: `concurrency`, `rateLimit: { requests, per }` and `maxResponseBytes` (streams are not covered; bound one with `.sse(Schema, { maxBytes })` or stop it with `break`, `stopOn` or a signal). Credential-like query params (`api_key`, `token`, ...) are already masked as `***` in error messages and `error.request.url`.
+- To get a client from an OpenAPI/Swagger JSON file run `npx endpoint-builder generate openapi.json --out src/api.ts`, then `import { createApi } from "./api"`. **Never edit the generated file**: regenerate it (add `--check` to CI). It takes the same options as `createClient` (auth, retry, hooks, `baseUrl`), operations are grouped by tag (`api.pets.listPets`), and it exports `contract` for `createApi(contract, options)` and `mockClient`. YAML must be converted to JSON first; callbacks, webhooks and cookie parameters are skipped.
 - In tests use `mockClient(contract, handlers)` from `@cordy/endpoint-builder/testing`, or inject `mockFetch(contract, handlers)` with `createClient({ fetch })` to test a client you configured. Do not stub the global `fetch` by hand. Handlers get `{ params, query, headers, body }` and a typed `fail(status, body)`; `fail(503)` simulates a transient failure.
 
 ## Common mistakes
@@ -41,3 +42,4 @@
 - `@cordy/endpoint-builder`: `createClient`, `endpoint`, `defineContract`, `schema`, `isHttpError`, auth helpers, error classes.
 - `@cordy/endpoint-builder/auth`, `/retry`, `/errors`: focused re-exports.
 - `@cordy/endpoint-builder/testing`: `mockClient`, `mockFetch`.
+- `@cordy/endpoint-builder/openapi`: what generated clients import (`jsonSchema`, `optional`, `queryStyle`, `unchecked`, `xmlBody`, `xmlResponse`). `@cordy/endpoint-builder/codegen`: `generate(document, options)` (Node). Command: `endpoint-builder generate`.

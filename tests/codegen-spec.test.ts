@@ -4,45 +4,82 @@ import { describe, expect, it } from "vitest";
 
 import { parseSpec, SpecError } from "../src/codegen/spec";
 
-const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
+const fixture = (name: string): unknown =>
+	JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
 
 describe("OpenAPI 3.0", () => {
 	const spec = parseSpec(fixture("shop-3.0.json"));
-	const operation = (id: string) => spec.operations.find(op => op.operationId === id)!;
+	const operation = (id: string) => spec.operations.find((op) => op.operationId === id)!;
 
 	it("reads the document", () => {
 		expect(spec.version).toBe("3.0");
-		expect(spec.info).toEqual({ title: "Shop API", version: "1.2.0", description: "Demo shop used by the generator tests" });
+		expect(spec.info).toEqual({
+			title: "Shop API",
+			version: "1.2.0",
+			description: "Demo shop used by the generator tests",
+		});
 		expect(spec.servers).toEqual(["https://api.shop.test/v1"]); // server variables are filled with their defaults
-		expect(spec.warnings).toEqual([]);
-		expect(spec.operations.map(op => `${op.method} ${op.path}`)).toEqual([
-			"GET /pets", "POST /pets", "GET /pets/{petId}", "DELETE /pets/{petId}",
-			"GET /pets/{petId}/photo", "POST /pets/{petId}/photo", "GET /pets/events", "POST /store/orders", "GET /health",
+		expect(spec.warnings).toEqual([
+			"Callbacks of createPet are ignored: they describe requests the server sends to you, which a client cannot make",
+		]);
+		expect(spec.operations.map((op) => `${op.method} ${op.path}`)).toEqual([
+			"GET /pets",
+			"POST /pets",
+			"GET /pets/{petId}",
+			"DELETE /pets/{petId}",
+			"GET /pets/{petId}/photo",
+			"POST /pets/{petId}/photo",
+			"GET /pets/events",
+			"POST /store/orders",
+			"GET /health",
 		]);
 	});
 
 	it("merges path-level and operation parameters, drops the headers the client manages", () => {
 		const list = operation("listPets");
-		expect(list.parameters.map(p => `${p.in}:${p.name}${p.required ? "!" : ""}`)).toEqual(["header:X-Trace-Id", "query:limit", "query:status", "header:X-Tenant!"]);
-		expect(list.parameters.find(p => p.name === "status")!.schema).toEqual({ type: "array", items: { $ref: "#/$defs/PetStatus" } });
-		expect(operation("getPet").parameters).toEqual([{ name: "petId", in: "path", required: true, schema: { type: "integer", format: "int64" } }]);
-		expect(operation("uploadPhoto").parameters.map(p => p.name)).toEqual(["petId"]);
+		expect(list.parameters.map((p) => `${p.in}:${p.name}${p.required ? "!" : ""}`)).toEqual([
+			"header:X-Trace-Id",
+			"query:limit",
+			"query:status",
+			"header:X-Tenant!",
+		]);
+		expect(list.parameters.find((p) => p.name === "status")!.schema).toEqual({
+			type: "array",
+			items: { $ref: "#/$defs/PetStatus" },
+		});
+		expect(operation("getPet").parameters).toEqual([
+			{ name: "petId", in: "path", required: true, schema: { type: "integer", format: "int64" } },
+		]);
+		expect(operation("uploadPhoto").parameters.map((p) => p.name)).toEqual(["petId"]);
 	});
 
 	it("resolves referenced responses, request bodies and headers", () => {
 		const list = operation("listPets");
-		expect(list.responses.map(r => r.status)).toEqual(["200", "default"]);
-		expect(list.responses[0]!.headers).toEqual([{ name: "X-Total-Count", in: "header", required: false, schema: { type: "integer" }, description: "All pets" }]);
-		expect(list.responses[1]).toMatchObject({ description: "Any error", content: { "application/json": { schema: { $ref: "#/$defs/Problem" } } } });
+		expect(list.responses.map((r) => r.status)).toEqual(["200", "default"]);
+		expect(list.responses[0]!.headers).toEqual([
+			{ name: "X-Total-Count", in: "header", required: false, schema: { type: "integer" }, description: "All pets" },
+		]);
+		expect(list.responses[1]).toMatchObject({
+			description: "Any error",
+			content: { "application/json": { schema: { $ref: "#/$defs/Problem" } } },
+		});
 
 		const create = operation("createPet");
-		expect(create.requestBody).toEqual({ required: true, content: { "application/json": { schema: { $ref: "#/$defs/NewPet" } } } });
+		expect(create.requestBody).toEqual({
+			required: true,
+			content: { "application/json": { schema: { $ref: "#/$defs/NewPet" } } },
+		});
 	});
 
 	it("keeps summaries, descriptions, tags and deprecation", () => {
-		expect(operation("listPets")).toMatchObject({ summary: "List pets", description: "Returns pets, newest first.", tags: ["pets"], deprecated: false });
+		expect(operation("listPets")).toMatchObject({
+			summary: "List pets",
+			description: "Returns pets, newest first.",
+			tags: ["pets"],
+			deprecated: false,
+		});
 		expect(operation("deletePet").deprecated).toBe(true);
-		expect(spec.operations.find(op => op.path === "/health")!.operationId).toBeUndefined();
+		expect(spec.operations.find((op) => op.path === "/health")!.operationId).toBeUndefined();
 	});
 
 	it("normalizes schemas: nullable, exclusive bounds, refs", () => {
@@ -57,10 +94,20 @@ describe("OpenAPI 3.0", () => {
 		expect(spec.schemas.Pet).toEqual({
 			allOf: [
 				{ $ref: "#/$defs/NewPet" },
-				{ type: "object", required: ["id"], properties: { id: { type: "integer", format: "int64" }, createdAt: { type: "string", format: "date-time", readOnly: true } } },
+				{
+					type: "object",
+					required: ["id"],
+					properties: {
+						id: { type: "integer", format: "int64" },
+						createdAt: { type: "string", format: "date-time", readOnly: true },
+					},
+				},
 			],
 		});
-		expect(spec.schemas.Animal).toEqual({ oneOf: [{ $ref: "#/$defs/Dog" }, { $ref: "#/$defs/Cat" }], discriminator: { propertyName: "petType" } });
+		expect(spec.schemas.Animal).toEqual({
+			oneOf: [{ $ref: "#/$defs/Dog" }, { $ref: "#/$defs/Cat" }],
+			discriminator: { propertyName: "petType" },
+		});
 		expect(spec.schemas.PetStatus).toEqual({ type: "string", enum: ["available", "pending", "sold"] });
 	});
 
@@ -73,34 +120,17 @@ describe("OpenAPI 3.0", () => {
 		});
 		expect(Object.keys(operation("uploadPhoto").requestBody!.content)).toEqual(["multipart/form-data"]);
 	});
-
-	it("collects callbacks of an operation", () => {
-		const [callback, ...rest] = operation("createPet").callbacks;
-		expect(rest).toEqual([]);
-		expect(callback).toMatchObject({
-			name: "onAdopted",
-			expression: "{$request.body#/callbackUrl}",
-			method: "POST",
-			operationId: "createPet",
-			requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/$defs/AdoptionEvent" } } } },
-			responses: [{ status: "200", description: "Acknowledged" }],
-		});
-	});
 });
 
 describe("OpenAPI 3.1", () => {
 	const spec = parseSpec(fixture("events-3.1.json"));
 
-	it("reads webhooks", () => {
+	it("ignores webhooks, with a warning", () => {
 		expect(spec.version).toBe("3.1");
-		expect(spec.webhooks).toHaveLength(1);
-		expect(spec.webhooks[0]).toMatchObject({
-			name: "eventCreated",
-			method: "POST",
-			summary: "A new event",
-			requestBody: { content: { "application/json": { schema: { $ref: "#/$defs/Event" } } } },
-		});
-		expect(spec.webhooks[0]!.expression).toBeUndefined();
+		expect(spec.warnings).toEqual([
+			"Webhooks are ignored: they describe requests the server sends to you, which a client cannot make",
+		]);
+		expect(spec.operations.map((op) => op.operationId)).toEqual(["getEvent", "getPayload"]);
 	});
 
 	it("keeps the 3.1 schema keywords and inlines a pointer into another schema", () => {
@@ -108,62 +138,97 @@ describe("OpenAPI 3.1", () => {
 		expect(event.properties.kind).toEqual({ const: "created" });
 		expect(event.properties.note).toEqual({ type: ["string", "null"] });
 		expect(event.properties.score).toEqual({ type: "number", exclusiveMinimum: 0 });
-		expect(event.properties.point).toEqual({ type: "array", prefixItems: [{ type: "number" }, { type: "number" }], items: false });
+		expect(event.properties.point).toEqual({
+			type: "array",
+			prefixItems: [{ type: "number" }, { type: "number" }],
+			items: false,
+		});
 		expect(event.properties.name).toEqual({ type: "string" }); // "#/components/schemas/Event/properties/id"
 	});
 
 	it("treats contentMediaType as binary data", () => {
-		const payload = spec.operations.find(op => op.operationId === "getPayload")!;
-		expect(payload.responses[0]!.content["application/octet-stream"]).toEqual({ schema: { type: "string", format: "binary" } });
+		const payload = spec.operations.find((op) => op.operationId === "getPayload")!;
+		expect(payload.responses[0]!.content["application/octet-stream"]).toEqual({
+			schema: { type: "string", format: "binary" },
+		});
 	});
 });
 
 describe("Swagger 2.0", () => {
 	const spec = parseSpec(fixture("pets-2.0.json"));
-	const operation = (id: string) => spec.operations.find(op => op.operationId === id)!;
+	const operation = (id: string) => spec.operations.find((op) => op.operationId === id)!;
 
 	it("is converted to the same model", () => {
 		expect(spec.version).toBe("2.0");
 		expect(spec.servers).toEqual(["https://legacy.pets.test/api", "http://legacy.pets.test/api"]);
-		expect(spec.operations.map(op => op.operationId)).toEqual(["listPets", "addPet", "getPet", "downloadPhoto", "uploadPhoto", "login", "exportXml"]);
+		expect(spec.operations.map((op) => op.operationId)).toEqual([
+			"listPets",
+			"addPet",
+			"getPet",
+			"downloadPhoto",
+			"uploadPhoto",
+			"login",
+			"exportXml",
+		]);
 		expect(spec.warnings).toEqual([]);
 	});
 
 	it("turns inline parameter types and collectionFormat into schemas and styles", () => {
-		const params = Object.fromEntries(operation("listPets").parameters.map(p => [p.name, p]));
-		expect(params.limit).toMatchObject({ in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 50 } }); // from #/parameters/limitParam
-		expect(params.tags).toMatchObject({ schema: { type: "array", items: { type: "string" } }, style: "form", explode: false }); // csv is Swagger's default
+		const params = Object.fromEntries(operation("listPets").parameters.map((p) => [p.name, p]));
+		expect(params.limit).toMatchObject({
+			in: "query",
+			required: false,
+			schema: { type: "integer", minimum: 1, maximum: 50 },
+		}); // from #/parameters/limitParam
+		expect(params.tags).toMatchObject({
+			schema: { type: "array", items: { type: "string" } },
+			style: "form",
+			explode: false,
+		}); // csv is Swagger's default
 		expect(params.ids).toMatchObject({ style: "form", explode: true });
 		expect(params.sort).toMatchObject({ style: "pipeDelimited", explode: false });
 	});
 
 	it("turns body, formData and produces/consumes into request bodies and content", () => {
-		expect(operation("addPet").requestBody).toEqual({ required: true, content: { "application/json": { schema: { $ref: "#/$defs/NewPet" } } } });
+		expect(operation("addPet").requestBody).toEqual({
+			required: true,
+			content: { "application/json": { schema: { $ref: "#/$defs/NewPet" } } },
+		});
 
 		const upload = operation("uploadPhoto");
-		expect(upload.parameters.map(p => p.name)).toEqual(["id"]); // path-level parameter
+		expect(upload.parameters.map((p) => p.name)).toEqual(["id"]); // path-level parameter
 		expect(upload.requestBody).toEqual({
 			required: true,
 			content: {
 				"multipart/form-data": {
 					schema: {
 						type: "object",
-						properties: { caption: { type: "string", description: "Shown under the photo" }, file: { type: "string", format: "binary" } },
+						properties: {
+							caption: { type: "string", description: "Shown under the photo" },
+							file: { type: "string", format: "binary" },
+						},
 						required: ["file"],
 					},
 				},
 			},
 		});
 		expect(Object.keys(operation("login").requestBody!.content)).toEqual(["application/x-www-form-urlencoded"]);
-		expect(operation("downloadPhoto").responses[0]!.content).toEqual({ "image/png": { schema: { type: "string", format: "binary" } } });
+		expect(operation("downloadPhoto").responses[0]!.content).toEqual({
+			"image/png": { schema: { type: "string", format: "binary" } },
+		});
 		expect(Object.keys(operation("exportXml").responses[0]!.content)).toEqual(["application/xml"]);
 	});
 
 	it("inlines referenced responses and keeps response headers", () => {
 		const get = operation("getPet");
-		expect(get.responses.map(r => r.status)).toEqual(["200", "404"]);
-		expect(get.responses[1]).toMatchObject({ description: "Not found", content: { "application/json": { schema: { $ref: "#/$defs/Error" } } } });
-		expect(operation("listPets").responses[0]!.headers).toEqual([{ name: "X-Rate-Limit", in: "header", required: false, schema: { type: "integer" }, description: "Calls left" }]);
+		expect(get.responses.map((r) => r.status)).toEqual(["200", "404"]);
+		expect(get.responses[1]).toMatchObject({
+			description: "Not found",
+			content: { "application/json": { schema: { $ref: "#/$defs/Error" } } },
+		});
+		expect(operation("listPets").responses[0]!.headers).toEqual([
+			{ name: "X-Rate-Limit", in: "header", required: false, schema: { type: "integer" }, description: "Calls left" },
+		]);
 	});
 
 	it("converts definitions: x-nullable and string discriminators", () => {
@@ -176,7 +241,12 @@ describe("Swagger 2.0", () => {
 });
 
 describe("errors and warnings", () => {
-	const minimal = (extra: object = {}) => ({ openapi: "3.0.0", info: { title: "t", version: "1" }, paths: {}, ...extra });
+	const minimal = (extra: object = {}) => ({
+		openapi: "3.0.0",
+		info: { title: "t", version: "1" },
+		paths: {},
+		...extra,
+	});
 
 	it("rejects documents it cannot read", () => {
 		expect(() => parseSpec("nope")).toThrow(SpecError);
@@ -191,24 +261,38 @@ describe("errors and warnings", () => {
 	});
 
 	it("reports unresolvable and impossible references", () => {
-		expect(() => parseSpec(minimal({ components: { schemas: { A: { $ref: "#/components/schemas/Missing" } } } }))).toThrow('Cannot resolve the reference "#/components/schemas/Missing"');
-		const recursive = minimal({ components: { schemas: { A: { type: "object", properties: { self: { $ref: "#/components/schemas/A/properties/self" } } } } } });
+		expect(() =>
+			parseSpec(minimal({ components: { schemas: { A: { $ref: "#/components/schemas/Missing" } } } })),
+		).toThrow('Cannot resolve the reference "#/components/schemas/Missing"');
+		const recursive = minimal({
+			components: {
+				schemas: { A: { type: "object", properties: { self: { $ref: "#/components/schemas/A/properties/self" } } } },
+			},
+		});
 		expect(() => parseSpec(recursive)).toThrow("recursive");
 	});
 
 	it("warns about what it skips", () => {
-		const spec = parseSpec(minimal({
-			paths: {
-				"/a": {
-					trace: { responses: {} },
-					get: { parameters: [{ name: "sid", in: "cookie", schema: { type: "string" } }, { name: "q", in: "query", content: { "application/json": { schema: { type: "object" } } } }], responses: {} },
+		const spec = parseSpec(
+			minimal({
+				paths: {
+					"/a": {
+						trace: { responses: {} },
+						get: {
+							parameters: [
+								{ name: "sid", in: "cookie", schema: { type: "string" } },
+								{ name: "q", in: "query", content: { "application/json": { schema: { type: "object" } } } },
+							],
+							responses: {},
+						},
+					},
 				},
-			},
-		}));
+			}),
+		);
 		expect(spec.warnings).toEqual([
 			"TRACE /a is not supported and was skipped",
 			'Parameter "q" is defined with `content`; it is typed from its schema but sent as plain text',
 		]);
-		expect(spec.operations[0]!.parameters.map(p => p.in)).toEqual(["cookie", "query"]); // cookies stay in the model; the generator decides
+		expect(spec.operations[0]!.parameters.map((p) => p.in)).toEqual(["cookie", "query"]); // cookies stay in the model; the generator decides
 	});
 });

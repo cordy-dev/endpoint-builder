@@ -1,1 +1,4 @@
 * text=auto eol=lf
+tests/generated/** linguist-generated=true
+llms-full.txt linguist-generated=true
+bun.lock linguist-generated=true
